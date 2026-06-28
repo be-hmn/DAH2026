@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GCS TACTICAL DISPLAY</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:#0a0e14;color:#c8d8e8;font-family:'Courier New',monospace;overflow:hidden;}
+#root{display:flex;flex-direction:column;height:100vh;}
+#hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 16px;background:#0d1828;border-bottom:1px solid #1e4060;height:36px;}
+.hdr-title{font-size:13px;font-weight:bold;letter-spacing:3px;color:#56d0f5;}
+.hdr-right{display:flex;align-items:center;gap:12px;font-size:11px;color:#8ab0c8;}
+.mav-badge{background:#0f2850;border:1px solid #3a7bc8;color:#82c8f0;padding:2px 8px;font-size:10px;letter-spacing:1.5px;}
+#body{display:flex;flex:1;overflow:hidden;}
+#map{flex:1;}
+#sidebar{width:480px;background:#0c141e;border-left:1px solid #1e4060;display:flex;flex-direction:column;overflow-y:auto;}
+.panel{padding:18px 20px;border-bottom:1px solid #1a3450;}
+.panel-ttl{font-size:20px;letter-spacing:3px;color:#4e88aa;margin-bottom:14px;text-transform:uppercase;}
+.unit-card{background:#0e1c2e;border:1px solid #1e4060;padding:16px 18px;margin-bottom:10px;}
+.u-id{color:#56d0f5;font-weight:bold;font-size:24px;}
+.u-type{color:#7aaec8;margin-left:8px;font-size:18px;}
+.u-coord{color:#8ab8cc;font-size:20px;margin-top:6px;font-family:monospace;}
+.u-mav{color:#4caf50;font-size:16px;margin-top:6px;}
+.unk-card{background:#1a1400;border:1px solid #7a6000;padding:16px 18px;margin-bottom:10px;}
+.unk-id{color:#ffd54f;font-weight:bold;font-size:24px;}
+.unk-type{color:#ffb300;margin-left:8px;font-size:18px;}
+.unk-coord{color:#ffe082;font-size:20px;margin-top:6px;font-family:monospace;}
+.unk-mav{color:#ffb300;font-size:16px;margin-top:6px;}
+#footer{display:flex;justify-content:space-between;align-items:center;padding:3px 16px;background:#0d1828;border-top:1px solid #1e4060;font-size:9px;color:#5a8fa8;height:24px;}
+.leaflet-tile-pane{filter:brightness(0.78) contrast(1.08) saturate(0.78)!important;}
+.u-coord{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#ai-panel{display:flex;flex-direction:column;min-height:0;}
+#ai-msgs{flex:1;overflow-y:auto;max-height:260px;min-height:80px;display:flex;flex-direction:column;gap:6px;margin-bottom:10px;}
+.ai-msg{font-size:11px;line-height:1.5;padding:8px 10px;border-radius:2px;white-space:pre-wrap;word-break:break-word;}
+.ai-msg-user{background:#0f2850;border:1px solid #3a7bc8;color:#c8e0f0;text-align:right;align-self:flex-end;max-width:90%;}
+.ai-msg-ai{background:#0a1a10;border:1px solid #2a6040;color:#80e0a0;align-self:flex-start;max-width:95%;}
+.ai-msg-err{background:#1a0a0a;border:1px solid #7a3030;color:#e08080;align-self:flex-start;max-width:95%;}
+.ai-msg-loading{color:#5a8fa8;font-style:italic;}
+#ai-input-row{display:flex;gap:6px;}
+#ai-input{flex:1;background:#0a111a;border:1px solid #1e4060;color:#c8d8e8;font-family:'Courier New',monospace;font-size:11px;padding:6px 8px;outline:none;}
+#ai-input:focus{border-color:#3a7bc8;}
+#ai-send{background:#0f2850;border:1px solid #3a7bc8;color:#56d0f5;font-family:'Courier New',monospace;font-size:10px;letter-spacing:1.5px;padding:6px 12px;cursor:pointer;}
+#ai-send:hover{background:#1a3870;}
+
+/* ── 태블릿 가로 (≤1024px) ───────────────────────────── */
+@media (max-width:1024px){
+  #sidebar{width:380px;}
+  #hdr{padding:5px 12px;}
+  .hdr-title{font-size:12px;letter-spacing:2px;}
+  .hdr-right{gap:10px;font-size:11px;}
+  .mav-badge{padding:2px 6px;letter-spacing:1px;}
+  .panel{padding:14px 16px;}
+  .unit-card{padding:12px 14px;margin-bottom:8px;}
+  .u-id{font-size:20px;}
+  .u-type{font-size:15px;}
+  .u-coord{font-size:17px;}
+  .u-mav{font-size:13px;}
+  #footer{padding:3px 12px;font-size:9px;}
+}
+
+/* ── 태블릿 세로 (≤768px) ────────────────────────────── */
+@media (max-width:768px){
+  #sidebar{width:280px;}
+  #hdr{height:32px;padding:4px 10px;}
+  .hdr-title{font-size:11px;letter-spacing:1.5px;}
+  .hdr-right{gap:7px;font-size:10px;}
+  .mav-badge{display:none;}
+  .panel{padding:10px 12px;}
+  .panel-ttl{font-size:14px;letter-spacing:1px;margin-bottom:8px;}
+  .unit-card{padding:10px 12px;margin-bottom:6px;}
+  .u-id{font-size:18px;}
+  .u-type{font-size:13px;}
+  .u-coord{font-size:15px;}
+  .u-mav{font-size:12px;}
+  #footer{height:22px;padding:2px 10px;font-size:8px;}
+  #uptd{display:none;}
+}
+</style></head>
+<body>
+<div id="root">
+  <div id="hdr">
+    <div class="hdr-title">&#9632; GCS TACTICAL DISPLAY</div>
+    <div class="hdr-right">
+      <span class="mav-badge">MAVLink v2</span>
+      <span id="clk">--:--:--</span>
+      <span>KST</span>
+    </div>
+  </div>
+  <div id="body">
+    <div id="map"></div>
+    <div id="sidebar">
+      <div class="panel">
+        <div class="panel-ttl">Friendly Units</div>
+        <div id="ulist"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-ttl">Link Status</div>
+        <div id="lstat" style="font-size:9px;color:#5a8fa8;">AWAITING...</div>
+      </div>
+      <div class="panel" id="ai-panel">
+        <div class="panel-ttl">AI Advisor</div>
+        <div id="ai-msgs"></div>
+        <div id="ai-input-row">
+          <input id="ai-input" type="text" placeholder="지휘관 질의 입력..."/>
+          <button id="ai-send">SEND</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="footer">
+    <span>GCS SYS v1.0 | OPER AREA: SEOUL</span>
+    <span id="seqd">MAVLink SEQ: ---</span>
+    <span id="uptd">UP: 00:00:00</span>
+  </div>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+var KR=L.latLngBounds([33.0,124.5],[38.9,132.0]);
+var map=L.map('map',{
+  center:[37.548,127.000],zoom:12,minZoom:7,
+  maxBounds:KR,maxBoundsViscosity:1.0,
+  zoomControl:false,attributionControl:false
+});
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,bounds:KR}).addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+var ICONS={
+  'ALPHA-1':{c:'#56d0f5',
+    svg:'<rect x="1" y="1" width="26" height="18" fill="rgba(0,10,25,.7)" stroke="CLR" stroke-width="1.5"/>'
+      +'<line x1="14" y1="3" x2="14" y2="17" stroke="CLR" stroke-width="1.2"/>'
+      +'<line x1="3" y1="10" x2="25" y2="10" stroke="CLR" stroke-width="2"/>'
+      +'<line x1="9" y1="15" x2="19" y2="15" stroke="CLR" stroke-width="1.2"/>'
+  },
+  'BRAVO-2':{c:'#56d0f5',
+    svg:'<rect x="1" y="1" width="26" height="18" fill="rgba(0,10,25,.7)" stroke="CLR" stroke-width="1.5"/>'
+      +'<circle cx="14" cy="10" r="2.5" fill="none" stroke="CLR" stroke-width="1.2"/>'
+      +'<line x1="6" y1="4" x2="11.5" y2="8.5" stroke="CLR" stroke-width="1.2"/>'
+      +'<line x1="22" y1="4" x2="16.5" y2="8.5" stroke="CLR" stroke-width="1.2"/>'
+      +'<line x1="6" y1="16" x2="11.5" y2="11.5" stroke="CLR" stroke-width="1.2"/>'
+      +'<line x1="22" y1="16" x2="16.5" y2="11.5" stroke="CLR" stroke-width="1.2"/>'
+  },
+  'CHARLIE-3':{c:'#80cbc4',
+    svg:'<rect x="1" y="1" width="26" height="18" fill="rgba(0,10,25,.7)" stroke="CLR" stroke-width="1.5"/>'
+      +'<line x1="3" y1="3" x2="25" y2="17" stroke="CLR" stroke-width="1.8"/>'
+      +'<line x1="25" y1="3" x2="3" y2="17" stroke="CLR" stroke-width="1.8"/>'
+  },
+  'DELTA-4':{c:'#56d0f5',
+    svg:'<rect x="1" y="1" width="26" height="18" fill="rgba(0,10,25,.7)" stroke="CLR" stroke-width="1.5"/>'
+      +'<line x1="3" y1="6" x2="21" y2="6" stroke="CLR" stroke-width="2"/>'
+      +'<line x1="14" y1="6" x2="14" y2="14" stroke="CLR" stroke-width="1.2"/>'
+      +'<path d="M10,14 Q14,17 18,14" fill="none" stroke="CLR" stroke-width="1.2"/>'
+      +'<line x1="19" y1="6" x2="24" y2="11" stroke="CLR" stroke-width="1.2"/>'
+      +'<line x1="23" y1="8" x2="26" y2="8" stroke="CLR" stroke-width="1.2"/>'
+  }
+};
+function mkIcon(id){
+  var def=ICONS[id]; if(!def)return L.Icon.Default;
+  var svg=def.svg.split('CLR').join(def.c);
+  return L.divIcon({
+    html:'<div style="position:relative;width:28px;height:20px">'
+      +'<svg xmlns="http://www.w3.org/2000/svg" width="28" height="20" viewBox="0 0 28 20">'+svg+'</svg>'
+      +'<div style="position:absolute;top:22px;left:50%;transform:translateX(-50%);white-space:nowrap;'
+      +'font:bold 9px monospace;color:'+def.c+';text-shadow:0 0 5px #000;letter-spacing:0.5px">'+id+'</div></div>',
+    className:'',iconSize:[28,20],iconAnchor:[14,10]
+  });
+}
+function mkUnkIcon(id){
+  return L.divIcon({
+    html:'<div style="position:relative;width:28px;height:28px">'
+      +'<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">'
+      +'<rect x="1" y="1" width="26" height="26" fill="rgba(25,18,0,.8)" stroke="#ffd54f" stroke-width="1.5" stroke-dasharray="4 2"/>'
+      +'<text x="14" y="19" text-anchor="middle" font-size="14" font-family="monospace" font-weight="bold" fill="#ffd54f">?</text>'
+      +'</svg>'
+      +'<div style="position:absolute;top:30px;left:50%;transform:translateX(-50%);white-space:nowrap;'
+      +'font:bold 9px monospace;color:#ffd54f;text-shadow:0 0 5px #000">'+id+'</div></div>',
+    className:'',iconSize:[28,28],iconAnchor:[14,14]
+  });
+}
+var UNITS=[
+  {id:'ALPHA-1',  type:'UAV',lat:37.5340,lon:126.9850},
+  {id:'BRAVO-2',  type:'UAV',lat:37.5680,lon:126.9280},
+  {id:'CHARLIE-3',type:'GND',lat:37.5020,lon:127.0430},
+  {id:'DELTA-4',  type:'UAV',lat:37.5910,lon:127.0180}
+];
+var markers={},trails={},trailPts={},dragging={};
+UNITS.forEach(function(u){
+  var m=L.marker([u.lat,u.lon],{icon:mkIcon(u.id),draggable:true}).addTo(map);
+  markers[u.id]=m; trailPts[u.id]=[]; dragging[u.id]=false;
+  trails[u.id]=L.polyline([],{color:(ICONS[u.id]||{c:'#29b6f6'}).c,weight:1.5,opacity:0.55,dashArray:'3 5'}).addTo(map);
+  m.on('dragstart',function(){dragging[u.id]=true;trailPts[u.id]=[];trails[u.id].setLatLngs([]);});
+  m.on('drag',function(){
+    var ll=m.getLatLng();
+    fetch('/api/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:u.id,lat:ll.lat,lon:ll.lng})});
+  });
+  m.on('dragend',function(){dragging[u.id]=false;});
+});
+var seq=0,t0=Date.now();
+function addTrail(uid,lat,lon){
+  if(dragging[uid])return;
+  var pts=trailPts[uid];
+  pts.push([lat,lon]);
+  if(pts.length>40)pts.shift();
+  trails[uid].setLatLngs(pts);
+}
+function renderUnits(units){
+  var ul=document.getElementById('ulist'); ul.innerHTML='';
+  units.forEach(function(u){
+    if(u.type==='UNK'){
+      var d=document.createElement('div'); d.className='unk-card';
+      d.innerHTML='<span class="unk-id">'+u.id+'</span><span class="unk-type">UNIDENTIFIED</span>'
+        +'<div class="unk-coord">LAT '+u.lat.toFixed(5)+'</div>'
+        +'<div class="unk-coord">LON '+u.lon.toFixed(5)+'</div>'
+        +'<div class="unk-mav">GLOBAL_POSITION_INT &#183; UNKNOWN</div>';
+      ul.appendChild(d);
+    } else {
+      var d=document.createElement('div'); d.className='unit-card';
+      d.innerHTML='<span class="u-id">'+u.id+'</span><span class="u-type">'+u.type+'</span>'
+        +'<div class="u-coord">LAT '+u.lat.toFixed(5)+'</div>'
+        +'<div class="u-coord">LON '+u.lon.toFixed(5)+'</div>'
+        +'<div class="u-mav">GLOBAL_POSITION_INT &#183; 2Hz</div>';
+      ul.appendChild(d);
+    }
+  });
+}
+function tick(data){
+  seq++;
+  document.getElementById('seqd').textContent='MAVLink SEQ: '+seq;
+  (data.units||[]).forEach(function(u){
+    if(!markers[u.id]){
+      var icon=u.type==='UNK'?mkUnkIcon(u.id):mkIcon(u.id);
+      var m=L.marker([u.lat,u.lon],{icon:icon,draggable:u.type!=='UNK'}).addTo(map);
+      markers[u.id]=m; trailPts[u.id]=[]; dragging[u.id]=false;
+      trails[u.id]=L.polyline([],{color:u.type==='UNK'?'#ffd54f':(ICONS[u.id]||{c:'#29b6f6'}).c,weight:1.5,opacity:0.55,dashArray:'3 5'}).addTo(map);
+    }
+    var m=markers[u.id]; if(!m||dragging[u.id])return;
+    m.setLatLng([u.lat,u.lon]); addTrail(u.id,u.lat,u.lon);
+  });
+  renderUnits(data.units||[]);
+
+  document.getElementById('lstat').innerHTML='<span style="color:#66bb6a">&#9679; UDP:14550 ACTIVE</span><br>'
+    +'<span style="color:#5a8fa8">RX: GLOBAL_POSITION_INT</span>';
+}
+function poll(){fetch('/api/state').then(function(r){return r.json();}).then(tick).catch(function(){});}
+function clk(){
+  var n=new Date();
+  document.getElementById('clk').textContent=
+    String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0');
+  var u=Math.floor((Date.now()-t0)/1000);
+  document.getElementById('uptd').textContent=
+    'UP: '+String(Math.floor(u/3600)).padStart(2,'0')+':'+String(Math.floor((u%3600)/60)).padStart(2,'0')+':'+String(u%60).padStart(2,'0');
+}
+setInterval(poll,500);setInterval(clk,1000);poll();clk();
+
+// ── AI Advisor ──────────────────────────────────────────
+var aiMsgs=document.getElementById('ai-msgs');
+function appendAiMsg(cls,text){
+  var el=document.createElement('div');
+  el.className='ai-msg '+cls;
+  el.textContent=text;
+  aiMsgs.appendChild(el);
+  aiMsgs.scrollTop=aiMsgs.scrollHeight;
+  return el;
+}
+function sendAI(){
+  var input=document.getElementById('ai-input');
+  var q=input.value.trim(); if(!q)return;
+  input.value='';
+  appendAiMsg('ai-msg-user',q);
+  var loading=appendAiMsg('ai-msg-ai ai-msg-loading','분석 중...');
+  fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      loading.className='ai-msg '+(d.error?'ai-msg-err':'ai-msg-ai');
+      loading.textContent=d.error?'오류: '+d.error:d.response;
+      aiMsgs.scrollTop=aiMsgs.scrollHeight;
+    })
+    .catch(function(e){
+      loading.className='ai-msg ai-msg-err';
+      loading.textContent='오류: '+e.message;
+    });
+}
+document.getElementById('ai-send').addEventListener('click',sendAI);
+document.getElementById('ai-input').addEventListener('keydown',function(e){if(e.key==='Enter')sendAI();});
+})();
+</script>
+</body></html>
