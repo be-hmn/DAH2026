@@ -1,7 +1,7 @@
 import copy
 from flask import Blueprint, jsonify, request
 from config import PATHS
-import state
+import state, ai
 
 bp = Blueprint('api', __name__)
 
@@ -33,3 +33,8 @@ def api_move():
                     p['p1'] = [lat, lon]
                     p['p2'] = [lat + dlat, lon + dlon]
     return jsonify({'ok': True})
+
+
+@bp.route('/api/ai/latest')
+def api_ai_latest():
+    return jsonify(ai.latest())

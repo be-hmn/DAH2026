@@ -9,7 +9,9 @@ import sys, time, random, threading, socket, json
 TARGET_HOST = '127.0.0.1'
 TARGET_PORT = 15550
 COUNT       = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-STEP_MAX    = 0.0008
+# 0.00035 deg/step @2Hz → lat 최대 ~280 km/h, 평균 ~200 km/h (적대 UAV 기준)
+STEP_MAX    = 0.00035
+PERTURB     = 0.10   # 방향 교란 비율 (STEP_MAX 대비), 낮을수록 직진성 증가
 BOUNDS      = {'lat': (37.50, 37.61), 'lon': (126.93, 127.08)}
 
 
@@ -25,8 +27,8 @@ def run_unit(idx):
 
     print(f'[{uid}] 시작  LAT {lat:.5f}  LON {lon:.5f}')
     while True:
-        dlat += random.uniform(-STEP_MAX * 0.3, STEP_MAX * 0.3)
-        dlon += random.uniform(-STEP_MAX * 0.3, STEP_MAX * 0.3)
+        dlat += rng.uniform(-STEP_MAX * PERTURB, STEP_MAX * PERTURB)
+        dlon += rng.uniform(-STEP_MAX * PERTURB, STEP_MAX * PERTURB)
         dlat  = max(-STEP_MAX, min(STEP_MAX, dlat))
         dlon  = max(-STEP_MAX, min(STEP_MAX, dlon))
         lat  += dlat

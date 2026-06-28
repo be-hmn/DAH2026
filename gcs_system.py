@@ -3,7 +3,7 @@ import logging
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 from flask import Flask, render_template
-import simulator, receiver, radar
+import simulator, receiver, radar, ai
 from api import bp
 
 app = Flask(__name__)
@@ -18,6 +18,7 @@ if __name__ == '__main__':
     receiver.start()
     simulator.start()
     radar.start()
+    ai.start()
     print('[GCS] http://127.0.0.1:8080')
     print('[GCS] MAVLink UDP:14550')
     app.run(host='127.0.0.1', port=8080, threaded=True)
