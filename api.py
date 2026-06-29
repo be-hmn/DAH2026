@@ -1,7 +1,7 @@
 import copy
 from flask import Blueprint, jsonify, request
 from config import PATHS
-import state, ai
+import state, ai, attack
 
 bp = Blueprint('api', __name__)
 
@@ -38,3 +38,16 @@ def api_move():
 @bp.route('/api/ai/latest')
 def api_ai_latest():
     return jsonify(ai.latest())
+
+
+@bp.route('/api/attack/status')
+def api_attack_status():
+    return jsonify(attack.status())
+
+
+@bp.route('/api/attack/target', methods=['POST'])
+def api_attack_target():
+    d  = request.get_json(force=True)
+    tid = d.get('target_id', 'UNK-0')
+    attack.set_target(tid)
+    return jsonify({'ok': True, 'target_id': tid})

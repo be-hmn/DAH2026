@@ -16,6 +16,11 @@ def _receive():
             lat = float(obj['lat'])
             lon = float(obj['lon'])
             with state.lock:
+                if uid in state.spoofed_ids:
+                    # attack_agent가 제어 중 — 실제 위치는 real_positions에만 기록
+                    state.real_positions[uid] = {'lat': lat, 'lon': lon}
+                    state.last_seen[uid] = time.time()
+                    continue
                 if uid not in state.units:
                     state.units[uid] = {'id': uid, 'type': 'UNK', 'lat': lat, 'lon': lon}
                     print(f'[RADAR] 미식별 비행체 등록: {uid}')
