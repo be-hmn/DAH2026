@@ -38,7 +38,8 @@ def _reaper():
     while True:
         now = time.time()
         with state.lock:
-            expired = [uid for uid, ts in state.last_seen.items() if now - ts > UNK_TTL]
+            expired = [uid for uid, ts in state.last_seen.items()
+                       if now - ts > UNK_TTL and uid not in state.spoofed_ids]
             for uid in expired:
                 state.units.pop(uid, None)
                 state.last_seen.pop(uid, None)

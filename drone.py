@@ -11,7 +11,7 @@ import state
 
 UID           = 'UNK-0'
 DRONE_HZ      = 2.0
-DRONE_SPEED   = 0.00028     # deg/step @2Hz ≈ 240 km/h
+DRONE_SPEED   = 0.00084     # deg/step @2Hz ≈ 720 km/h (3배속)
 WP_ARRIVE_DEG = 0.0005      # ≈ 55 m 이내 → 웨이포인트 도착
 
 # 출발 좌표 — DMZ 인근 (파주/연천 방면)
@@ -65,6 +65,7 @@ def _loop():
 
         with state.lock:
             state.real_positions[UID] = {'lat': round(lat, 7), 'lon': round(lon, 7)}
+            state.last_seen[UID] = time.time()
 
         elapsed = time.time() - t0
         time.sleep(max(0.0, interval - elapsed))
