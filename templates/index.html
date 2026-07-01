@@ -175,6 +175,37 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
 @keyframes ai-flash{from{background:#0a2020;}to{background:var(--bg);}}
 @keyframes atk-flash{from{background:#200808;}to{background:rgba(0,0,0,.35);}}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.25;}}
+
+/* ── 지휘 명령 패널 ── */
+.section-cmd{background:linear-gradient(160deg,#0a0e1c 0%,var(--surface) 100%);
+             border-top:2px solid #7755cc !important;padding:18px 20px;}
+.sec-ttl-cmd{font-size:10px;font-weight:700;letter-spacing:2.5px;color:#aa88ff;text-transform:uppercase;}
+.cmd-reply{font-size:12px;line-height:1.7;color:var(--txt-1);
+           background:rgba(0,0,0,.35);border:1px solid rgba(120,80,220,.2);
+           border-left:3px solid #7755cc;padding:10px 12px;border-radius:2px;
+           margin-bottom:10px;min-height:48px;white-space:pre-wrap;word-break:break-word;}
+.cmd-orders{margin-bottom:10px;}
+.cmd-order-row{display:flex;align-items:center;justify-content:space-between;
+               padding:4px 8px;background:rgba(80,40,160,.15);border:1px solid rgba(120,80,220,.25);
+               border-radius:2px;margin-bottom:4px;font-size:10px;font-family:var(--fnt-mono);}
+.cmd-order-id{color:#aa88ff;font-weight:700;min-width:72px;}
+.cmd-order-mission{color:var(--txt-2);flex:1;padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cmd-order-clear{cursor:pointer;color:#664488;font-size:9px;padding:1px 5px;border:1px solid #442266;
+                 border-radius:2px;background:rgba(0,0,0,.3);}
+.cmd-order-clear:hover{color:#cc88ff;border-color:#aa66ee;}
+.cmd-input-wrap{display:flex;gap:6px;align-items:flex-end;}
+.cmd-input{flex:1;background:rgba(0,0,0,.45);border:1px solid rgba(120,80,220,.35);border-radius:2px;
+           color:var(--txt-1);font-size:11px;padding:7px 10px;font-family:var(--fnt-ui);
+           resize:none;line-height:1.5;outline:none;min-height:52px;}
+.cmd-input::placeholder{color:var(--txt-3);}
+.cmd-input:focus{border-color:#7755cc;}
+.cmd-submit{background:#331a66;border:1px solid #7755cc;color:#aa88ff;font-size:10px;
+            font-weight:700;letter-spacing:1px;padding:8px 14px;border-radius:2px;
+            cursor:pointer;white-space:nowrap;height:52px;min-width:52px;}
+.cmd-submit:hover{background:#4422aa;}
+.cmd-submit:disabled{opacity:.4;cursor:not-allowed;}
+.cmd-thinking{font-size:9px;color:#7755cc;letter-spacing:1px;margin-top:6px;display:none;}
+.cmd-thinking.on{display:block;animation:blink 1s infinite;}
 </style></head>
 <body>
 <div id="root">
@@ -339,6 +370,29 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
             <span></span>
             <span class="ai-ts" id="ai-ts">—</span>
           </div>
+        </div>
+
+        <!-- ── 지휘 명령 패널 ── -->
+        <div class="section section-cmd">
+          <div class="sec-hdr" style="margin-bottom:12px;">
+            <span class="sec-ttl-cmd">지휘 명령</span>
+            <span id="cmd-badge" style="font-size:9px;font-family:var(--fnt-mono);color:#664488;
+              background:#0a0614;border:1px solid #331a66;padding:1px 8px;border-radius:10px;">STANDBY</span>
+          </div>
+
+          <!-- 진행 중 명령 목록 -->
+          <div class="cmd-orders" id="cmd-orders-list" style="display:none"></div>
+
+          <!-- LLM 응답 -->
+          <div class="cmd-reply" id="cmd-reply" style="display:none"></div>
+
+          <!-- 입력창 -->
+          <div class="cmd-input-wrap">
+            <textarea class="cmd-input" id="cmd-input"
+              placeholder="예) ALPHA-1을 디코이 방향으로 출격&#10;예) BRAVO-2와 DELTA-4 차단 위치로 이동"></textarea>
+            <button class="cmd-submit" id="cmd-submit">전송</button>
+          </div>
+          <div class="cmd-thinking" id="cmd-thinking">■ LLM 명령 해석 중...</div>
         </div>
 
       </div>
@@ -764,6 +818,88 @@ function pollAttack(){
 
 setInterval(poll,500); setInterval(clk,1000); setInterval(pollAI,3000); setInterval(pollAttack,1000);
 poll(); clk(); pollAI(); pollAttack();
+
+// ── 지휘 명령 ──
+var cmdSubmit = document.getElementById('cmd-submit');
+var cmdInput  = document.getElementById('cmd-input');
+var cmdThink  = document.getElementById('cmd-thinking');
+
+function sendCommand(){
+  var text = cmdInput.value.trim();
+  if(!text) return;
+  cmdSubmit.disabled = true;
+  cmdThink.classList.add('on');
+  fetch('/api/command', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text: text})
+  }).then(function(r){return r.json();}).then(function(d){
+    cmdInput.value = '';
+    var replyEl = document.getElementById('cmd-reply');
+    if(d.reply){
+      replyEl.textContent = d.reply;
+      replyEl.style.display = '';
+    }
+    if(d.error){
+      replyEl.textContent = '[오류] ' + d.error;
+      replyEl.style.display = '';
+    }
+    pollCommand();
+  }).catch(function(e){
+    var replyEl = document.getElementById('cmd-reply');
+    replyEl.textContent = '[통신 오류] ' + e;
+    replyEl.style.display = '';
+  }).finally(function(){
+    cmdSubmit.disabled = false;
+    cmdThink.classList.remove('on');
+  });
+}
+
+cmdSubmit.addEventListener('click', sendCommand);
+cmdInput.addEventListener('keydown', function(e){
+  if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){
+    e.preventDefault(); sendCommand();
+  }
+});
+
+function pollCommand(){
+  fetch('/api/command/latest').then(function(r){return r.json();}).then(function(d){
+    var activeOrders = d.active_orders || {};
+    var ids = Object.keys(activeOrders);
+    var badge = document.getElementById('cmd-badge');
+    var ordersList = document.getElementById('cmd-orders-list');
+
+    if(ids.length){
+      badge.textContent = 'ACTIVE ' + ids.length;
+      badge.style.color = '#aa88ff';
+      ordersList.style.display = '';
+      ordersList.innerHTML = ids.map(function(uid){
+        var o = activeOrders[uid];
+        return '<div class="cmd-order-row">'
+          +'<span class="cmd-order-id">'+uid+'</span>'
+          +'<span class="cmd-order-mission">'+( o.mission||'이동 중' )+'</span>'
+          +'<span class="cmd-order-clear" onclick="clearOrder(\''+uid+'\')">해제</span>'
+          +'</div>';
+      }).join('');
+    } else {
+      badge.textContent = 'STANDBY';
+      badge.style.color = '#664488';
+      ordersList.style.display = 'none';
+      ordersList.innerHTML = '';
+    }
+  }).catch(function(){});
+}
+
+function clearOrder(uid){
+  fetch('/api/command/clear', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: uid})
+  }).then(function(){pollCommand();}).catch(function(){});
+}
+
+setInterval(pollCommand, 2000);
+pollCommand();
 })();
 </script>
 </body></html>
