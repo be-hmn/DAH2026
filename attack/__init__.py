@@ -1,1 +1,1 @@
-from .agent import start, stop, status, set_target
+from .agent import configure, start, stop, status, set_target

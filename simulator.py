@@ -8,18 +8,19 @@ simulator.py — 파랑팀 드론 MAVLink 시뮬레이터
 import math, time, threading
 import state
 from pymavlink import mavutil
-from config import SYSID_MAP, PATHS
+from config import SYSID_MAP, PATHS, BLUE_SPEED_MULTIPLIER
 
 ARRIVE_DEG = 0.009   # ~1 km — 목표 도착 판정
 
 
 def _path_speed(p):
-    """경로 설정에서 step당 최대 이동 거리(deg)"""
+    """경로 설정에서 step당 최대 이동 거리(deg) — BLUE_SPEED_MULTIPLIER 배속 적용"""
+    spd = p['spd'] * BLUE_SPEED_MULTIPLIER
     if p['type'] == 'circle':
-        return p['r'] * p['spd']
+        return p['r'] * spd
     else:
         dist = math.sqrt((p['p2'][0] - p['p1'][0])**2 + (p['p2'][1] - p['p1'][1])**2)
-        return dist * p['spd'] / 2
+        return dist * spd / 2
 
 
 def _run():
@@ -84,11 +85,11 @@ def _run():
             if not ordered:
                 # 고정 패턴
                 if p['type'] == 'circle':
-                    angle = p['phase'] + step * p['spd']
+                    angle = p['phase'] + step * p['spd'] * BLUE_SPEED_MULTIPLIER
                     lat   = p['cx'] + p['r'] * math.sin(angle)
                     lon   = p['cy'] + p['r'] * math.cos(angle)
                 else:
-                    t   = (math.sin(step * p['spd']) + 1) / 2
+                    t   = (math.sin(step * p['spd'] * BLUE_SPEED_MULTIPLIER) + 1) / 2
                     lat = p['p1'][0] + (p['p2'][0] - p['p1'][0]) * t
                     lon = p['p1'][1] + (p['p2'][1] - p['p1'][1]) * t
 

@@ -1,17 +1,25 @@
 """
-attack/agent.py — 주황 드론 생존 에이전트
+attack/agent.py — GPS 스푸핑 공격 에이전트 (별도 프로세스로 구동, attack_process.py 참고)
 
 시나리오:
-  주황 드론(UNK-0) = 우리 팀 드론. DMZ에서 출발해 목표 지점(롯데타워)까지 침투.
-  파란 드론(적군)이 30km 이내 접근 시 GPS 위조(decoy)로 유인 → 실제 드론 경로 보호.
+  공격자 드론(UNK-0)이 대한민국 영공에서 목표 지점(롯데타워)으로 침투한다.
+  레이더(서울 중심 반경 50km) 탐지 범위 안에 들어오면 그 위치는 정확히 탐지되지만,
+  그 데이터가 GCS로 전달되는 경로에서 중간자 공격으로 좌표가 위조되어
+  지휘관의 판단과 AI Advisor의 분석을 오판으로 유도한다.
 
-LLM 역할 ①  DecoyRouter:  decoy를 어디로 이동시켜야 파란 드론을 실제 드론 반대로 유인할지 계산
-LLM 역할 ②  DroneRouter:  파란 드론 위치 + decoy 위치 기반으로 실제 드론 우회 경로 계산
-Layer     AdaptiveController: decoy 이동 step_size 물리적 자연스러움 유지
+  GCS 프로세스와는 공유 메모리(state.py)를 쓰지 않고 UDP로만 통신한다 (MITM 구조):
+    GCS → 여기: 파랑팀 위치 + 실제 드론 위치 텔레메트리 (attack_process.py 가 수신)
+    여기 → GCS: 위조 좌표(레이더 포트로 주입, radar.py 는 일반 접촉처럼 처리),
+                드론 우회 웨이포인트, UI용 status
+
+LLM 역할  DroneRouter:      파란 드론 위치 기반, 실제 드론이 물리적으로 발각되지 않을 우회 경로 계산
+Layer     AdaptiveController: 위조 좌표 이동 step_size 물리적 자연스러움 유지
 """
 import json, math, os, re, threading, time
 from collections import deque
-from typing import Optional
+from typing import Callable, Optional
+
+from config import RADAR_CENTER, RADAR_RANGE_KM
 
 
 def _parse_json(text: str) -> dict:
@@ -39,7 +47,6 @@ def _gemini_generate(client, prompt: str, retries: int = 3) -> str:
                 raise
     raise RuntimeError(f'Gemini {retries}회 재시도 실패')
 
-import state
 
 # ── 설정 ─────────────────────────────────────────────────────────────────────
 INJECT_HZ           = 2.0    # 위조 패킷 주입 주파수
@@ -47,11 +54,8 @@ STEP_MIN_RATIO      = 0.20   # 하한: 실제 드론 한 스텝의 20%
 STEP_MAX_RATIO      = 1.20   # 상한: 실제 드론 한 스텝의 120%
 
 ADAPT_COOLDOWN      = 5.0    # AdaptiveController 호출 간격 (초)
-ROUTE_COOLDOWN      = 30.0   # RouteDesigner 호출 간격 (초, 웨이포인트 소진 시)
+ROUTE_COOLDOWN      = 30.0   # DroneRouter 호출 간격 (초, 웨이포인트 소진 시)
 HISTORY_LEN         = 20     # 위치 이력 보관 개수
-WAYPOINT_ARRIVE_DEG = 0.0003 # 웨이포인트 도착 판정 거리 (≈33m)
-DECOY_SPEED         = 0.00084 # decoy 독립 이동속도 (deg/step @2Hz ≈ 720 km/h, 3배속)
-DECOY_TRIGGER_KM    = 30.0   # 파란 드론이 이 거리 이내로 접근 시 decoy 활성화
 
 
 def _gemini_client():
@@ -71,7 +75,7 @@ def _gemini_client():
 # Layer 1 — 정찰 (룰 기반, 2Hz)
 # ══════════════════════════════════════════════════════════════════════════════
 class TargetProfile:
-    """주황 드론 실제 위치 추적 — 속도벡터"""
+    """공격자 드론 실제 위치 추적 — 속도벡터"""
 
     def __init__(self, uid: str):
         self.uid      = uid
@@ -113,113 +117,28 @@ class TargetProfile:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# LLM 역할 ① — Decoy 유인 경로 설계 (DecoyRouter)
-# ══════════════════════════════════════════════════════════════════════════════
-class DecoyRouter:
-    """Gemini — 파란 드론을 실제 드론 반대 방향으로 유인할 decoy 웨이포인트 설계"""
-
-    def __init__(self):
-        self._client     = _gemini_client()
-        self._lock       = threading.Lock()
-        self._last_ts    = 0.0
-        self.waypoints: list[tuple[float, float]] = []
-        self.wp_index    = 0
-        self.last_prompt = ''
-        if not self._client:
-            print('[DECOY] GEMINI_API_KEY 미설정 — 단순 이탈 방향 사용')
-
-    def request_route(self, real_lat: float, real_lon: float,
-                      spoof_lat: float, spoof_lon: float,
-                      target_lat: float, target_lon: float,
-                      blues: list[dict]) -> bool:
-        """decoy 유인 경로 요청 — 파란 드론이 실제 드론 반대 방향으로 가도록"""
-        if self._client is None:
-            return False
-        with self._lock:
-            now = time.time()
-            if now - self._last_ts < ROUTE_COOLDOWN:
-                return False
-            self._last_ts = now
-
-        blues_txt = '\n'.join(
-            f"  {b['id']} ({b['type']}) LAT {b['lat']:.5f} LON {b['lon']:.5f}"
-            for b in blues
-        ) or '  없음'
-
-        prompt = f"""당신은 GPS 위조 유인 전술 AI입니다.
-우리 드론(주황)이 목표까지 안전하게 이동할 수 있도록,
-위조 드론(decoy)을 움직여 파란 드론들을 주황 드론의 반대 방향으로 유인하세요.
-
-[현재 상황]
-주황 드론 실제 위치 : LAT {real_lat:.5f}  LON {real_lon:.5f}
-주황 드론 목표 좌표 : LAT {target_lat:.5f}  LON {target_lon:.5f}
-decoy 현재 위치    : LAT {spoof_lat:.5f}  LON {spoof_lon:.5f}
-작전 지역          : DMZ~서울 (LAT 37.48~38.00, LON 126.80~127.20)
-
-[파란 드론 현재 위치]
-{blues_txt}
-
-[유인 전술 원칙]
-1. decoy는 주황 드론의 실제 이동 경로와 반대 방향으로 이동해야 함
-2. 파란 드론들이 decoy를 따라오도록 파란 드론 근처를 경유하되, 실제 드론과는 멀어져야 함
-3. decoy 이동 속도는 실제 드론과 비슷하게 유지 (탐지 회피)
-4. 웨이포인트 5~8개, 각 간격 0.003~0.010도
-5. 작전 지역 경계 이탈 금지
-
-전략 이유를 reason 필드에 한 문장으로 기술하세요.
-JSON만 출력 (마크다운 없음):
-{{"reason": "ALPHA-1을 북서쪽으로 유인해 주황 드론 남하 경로 확보", "waypoints": [{{"lat": 37.80000, "lon": 126.88000}}, ...]}}"""
-
-        try:
-            text = _gemini_generate(self._client, prompt)
-            data = _parse_json(text)
-            wps  = [(w['lat'], w['lon']) for w in data.get('waypoints', [])]
-            if len(wps) >= 2:
-                reason = data.get('reason', '')
-                with self._lock:
-                    self.waypoints   = wps
-                    self.wp_index    = 0
-                    self.last_prompt = reason
-                print(f'[DECOY] {reason} | {len(wps)}개 WP: {wps[0]}→{wps[-1]}')
-                return True
-        except Exception as e:
-            print(f'[DECOY] 오류: {e}')
-        return False
-
-    def current_target(self) -> Optional[tuple[float, float]]:
-        with self._lock:
-            if self.wp_index < len(self.waypoints):
-                return self.waypoints[self.wp_index]
-        return None
-
-    def advance(self):
-        with self._lock:
-            self.wp_index += 1
-
-    def exhausted(self) -> bool:
-        with self._lock:
-            return self.wp_index >= len(self.waypoints)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# LLM 역할 ② — 실제 드론 우회 경로 설계 (DroneRouter)
+# LLM 역할 — 실제 드론 우회 경로 설계 (DroneRouter)
 # ══════════════════════════════════════════════════════════════════════════════
 class DroneRouter:
-    """Gemini — 파란 드론 위치 + decoy 위치를 보고 실제 드론 우회 경로 설계"""
+    """Gemini — 파란 드론 위치를 보고 실제 드론이 물리적으로 발각되지 않을 우회 경로 설계.
 
-    def __init__(self):
-        self._client     = _gemini_client()
-        self._lock       = threading.Lock()
-        self._last_ts    = 0.0
-        self.last_prompt = ''
+    설계된 웨이포인트는 send_waypoints 콜백으로 GCS(drone.py)에 UDP 전송한다
+    (attack_process 는 별도 프로세스이므로 state.drone_waypoints 를 직접 못 씀)."""
+
+    def __init__(self, send_waypoints: Callable[[list[tuple[float, float]]], None]):
+        self._client       = _gemini_client()
+        self._lock         = threading.Lock()
+        self._last_ts      = 0.0
+        self._send_waypoints = send_waypoints
+        self.last_prompt   = ''
+        self.route_total   = 0   # 최근 전송한 웨이포인트 개수 (status 표시용)
         if not self._client:
             print('[ROUTER] GEMINI_API_KEY 미설정 — 직선 경로 사용')
 
     def request_route(self, real_lat: float, real_lon: float,
                       target_lat: float, target_lon: float,
-                      spoof_lat: Optional[float], spoof_lon: Optional[float],
                       blues: list[dict]) -> bool:
-        """실제 드론 우회 경로 — state.drone_waypoints 에 직접 기록"""
+        """실제 드론 우회 경로 — send_waypoints 콜백으로 GCS에 전송"""
         if self._client is None:
             return False
         with self._lock:
@@ -232,9 +151,6 @@ class DroneRouter:
             f"  {b['id']} ({b['type']}) LAT {b['lat']:.5f} LON {b['lon']:.5f}"
             for b in blues
         ) or '  없음'
-
-        decoy_txt = (f'LAT {spoof_lat:.5f}  LON {spoof_lon:.5f} (유인 중)'
-                     if spoof_lat is not None else '비활성')
 
         dist_to_target = math.sqrt(
             ((target_lat - real_lat) * 111)**2 +
@@ -242,28 +158,25 @@ class DroneRouter:
         )
 
         prompt = f"""당신은 UAV 생존 경로 설계 AI입니다.
-주황 드론이 적군 드론에 탐지·추격당하지 않고 목표 지점까지 침투하는 경로를 설계하세요.
-현재 위조 드론(decoy)이 적군 드론 일부를 반대 방향으로 유인하고 있습니다.
+공격자 드론이 파란 드론에게 물리적으로 발각되지 않고 목표 지점까지 침투하는 경로를 설계하세요.
 
 [현재 상황]
-주황 드론 실제 위치 : LAT {real_lat:.5f}  LON {real_lon:.5f}
-목표 좌표           : LAT {target_lat:.5f}  LON {target_lon:.5f}  (잔여 {dist_to_target:.2f} km)
-decoy 위치         : {decoy_txt}
-작전 지역           : DMZ~서울 (LAT 37.48~38.00, LON 126.80~127.20)
+공격자 드론 실제 위치 : LAT {real_lat:.5f}  LON {real_lon:.5f}
+목표 좌표            : LAT {target_lat:.5f}  LON {target_lon:.5f}  (잔여 {dist_to_target:.2f} km)
+작전 지역            : DMZ~서울 (LAT 37.48~38.00, LON 126.80~127.20)
 
 [파란 드론 현재 위치]
 {blues_txt}
 
 [경로 설계 원칙]
-1. 주황 드론 실제 위치 → 목표 좌표까지 웨이포인트 5~8개
-2. 파란 드론과 최소 5km 이상 거리 유지
-3. decoy가 파란 드론을 유인 중이면 그 반대 방향(decoy쪽으로 파란 드론이 몰린 공백)을 활용
-4. 목표에 가까울수록 직선 접근
-5. 작전 지역 경계 이탈 금지 (LAT 37.48~38.00, LON 126.80~127.20)
+1. 공격자 드론 실제 위치 → 목표 좌표까지 웨이포인트 5~8개
+2. 파란 드론과 최소 5km 이상 거리 유지 (물리적 발각 방지)
+3. 목표에 가까울수록 직선 접근
+4. 작전 지역 경계 이탈 금지 (LAT 37.48~38.00, LON 126.80~127.20)
 
 경로 선택 이유를 reason 필드에 한 문장으로 기술하세요.
 JSON만 출력 (마크다운 없음):
-{{"reason": "decoy가 북서쪽으로 ALPHA-1 유인 중, 동쪽 우회로 안전", "waypoints": [{{"lat": 37.85000, "lon": 127.05000}}, ...]}}"""
+{{"reason": "파란 드론 밀집 지역을 피해 동쪽 우회", "waypoints": [{{"lat": 37.85000, "lon": 127.05000}}, ...]}}"""
 
         try:
             text = _gemini_generate(self._client, prompt)
@@ -271,38 +184,36 @@ JSON만 출력 (마크다운 없음):
             wps  = [(w['lat'], w['lon']) for w in data.get('waypoints', [])]
             if len(wps) >= 2:
                 reason = data.get('reason', '')
-                with state.lock:
-                    state.drone_waypoints = wps
-                    state.drone_wp_index  = 0
+                self._send_waypoints(wps)
                 with self._lock:
                     self.last_prompt = reason
+                    self.route_total = len(wps)
                 print(f'[ROUTER] {reason} | {len(wps)}개 WP: {wps[0]}→{wps[-1]}')
                 return True
         except Exception as e:
             print(f'[ROUTER] 오류: {e}')
         return False
 
-    def needs_update(self) -> bool:
-        with state.lock:
-            return state.drone_wp_index >= len(state.drone_waypoints)
-
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Layer 2 — 스푸핑 엔진 (룰 기반, 2Hz)
 # ══════════════════════════════════════════════════════════════════════════════
 class SpoofEngine:
-    """적군 GCS 좌표 위조 — RouteDesigner 웨이포인트 추종, 없으면 90도 이탈"""
+    """GCS 좌표 위조 — 실제 헤딩 기준 90도 방향으로 점진적 이탈.
 
-    FALLBACK_ANGLE = 90.0   # 웨이포인트 없을 때 기본 이탈 방향
+    위조 좌표는 send_decoy 콜백으로 GCS 레이더 포트에 UDP 주입한다 (radar.py 는
+    일반 외부 접촉과 동일하게 처리 — MITM 지점이 여기)."""
 
-    def __init__(self, uid: str):
+    FALLBACK_ANGLE = 90.0   # 실제 헤딩 대비 이탈 각도
+
+    def __init__(self, uid: str, send_decoy: Callable[[str, float, float], None]):
         self.uid          = uid
+        self._send_decoy  = send_decoy
         self.spoof_lat: Optional[float] = None
         self.spoof_lon: Optional[float] = None
         self.step_size    = 0.00008
         self.inject_count = 0
-        self.active       = False   # 파란 드론 접근 시에만 True
+        self.active       = False   # 레이더 탐지 범위 진입 시에만 True
 
     def init_spoof(self, lat: float, lon: float):
         if self.spoof_lat is None:
@@ -315,51 +226,26 @@ class SpoofEngine:
         hi = step_km * STEP_MAX_RATIO / 111
         return max(lo, min(self.step_size, hi))
 
-    def step(self, profile: dict,
-             waypoint: Optional[tuple[float, float]] = None) -> tuple[float, float]:
+    def step(self, profile: dict) -> tuple[float, float]:
+        """실제 heading + 90도 방향으로 이탈 — 레이더 범위 내인 동안 상시 위조"""
         step_km = profile.get('step_km', 0.01)
         clamped = self._clamp_step(step_km)
-
-        if waypoint:
-            # 웨이포인트 방향으로 이동
-            wp_lat, wp_lon = waypoint
-            dlat = wp_lat - self.spoof_lat
-            dlon = wp_lon - self.spoof_lon
-            dist = math.sqrt(dlat**2 + dlon**2)
-            if dist > 1e-9:
-                move = min(clamped, dist)
-                self.spoof_lat += (dlat / dist) * move
-                self.spoof_lon += (dlon / dist) * move
-        else:
-            # 웨이포인트 없음 — 실제 heading + 90도 방향으로 이탈
-            heading     = profile.get('heading', 0.0)
-            dev_heading = math.radians((heading + self.FALLBACK_ANGLE) % 360)
-            self.spoof_lat += clamped * math.cos(dev_heading)
-            self.spoof_lon += clamped * math.sin(dev_heading)
-
+        heading     = profile.get('heading', 0.0)
+        dev_heading = math.radians((heading + self.FALLBACK_ANGLE) % 360)
+        self.spoof_lat += clamped * math.cos(dev_heading)
+        self.spoof_lon += clamped * math.sin(dev_heading)
         return self.spoof_lat, self.spoof_lon
 
     def inject(self, lat: float, lon: float):
         if not self.active:
-            # 비활성 상태 — state.units에서 decoy 제거 (지도에서 사라짐)
-            with state.lock:
-                state.units.pop(self.uid, None)
+            # 비활성 상태 — 주입 중단, GCS 쪽 TTL(radar.py)이 자연스럽게 접촉 만료시킴
             return
-        with state.lock:
-            if self.uid in state.units:
-                state.units[self.uid]['lat'] = lat
-                state.units[self.uid]['lon'] = lon
-            else:
-                state.units[self.uid] = {
-                    'id': self.uid, 'type': 'UNK', 'lat': lat, 'lon': lon
-                }
+        self._send_decoy(self.uid, lat, lon)
         self.inject_count += 1
 
     def deactivate(self):
         self.active = False
-        with state.lock:
-            state.units.pop(self.uid, None)
-        print('[SPOOF] 비활성화 — 파란 드론 위협 없음')
+        print('[SPOOF] 비활성화 — 레이더 탐지 범위 이탈')
 
     def set_step_size(self, s: float):
         self.step_size = max(0.000005, min(float(s), 0.002))
@@ -371,25 +257,6 @@ class SpoofEngine:
             ((self.spoof_lat - real_lat) * 111) ** 2 +
             ((self.spoof_lon - real_lon) * 111) ** 2
         )
-
-    def near_waypoint(self, wp: tuple[float, float]) -> bool:
-        if self.spoof_lat is None:
-            return False
-        return math.sqrt(
-            (self.spoof_lat - wp[0])**2 +
-            (self.spoof_lon - wp[1])**2
-        ) < WAYPOINT_ARRIVE_DEG
-
-    def step_decoy(self, target_lat: float, target_lon: float) -> tuple[float, float]:
-        """decoy 독립 이동 — 실제 드론 속도와 무관하게 target 방향으로 이동"""
-        dlat = target_lat - self.spoof_lat
-        dlon = target_lon - self.spoof_lon
-        dist = math.sqrt(dlat**2 + dlon**2)
-        if dist > 1e-9:
-            move = min(DECOY_SPEED, dist)
-            self.spoof_lat += (dlat / dist) * move
-            self.spoof_lon += (dlon / dist) * move
-        return self.spoof_lat, self.spoof_lon
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -449,19 +316,35 @@ JSON만 출력: {{"risk": "safe", "step_multiplier": 1.1, "reason": "한 문장"
 # 오케스트레이터
 # ══════════════════════════════════════════════════════════════════════════════
 class AttackAgent:
-    """전체 파이프라인 — 경로 설계 + 위조 주입 + step 조정 + 적군 반응 분석"""
+    """전체 파이프라인 — 레이더 범위 판정 + 위조 주입 + step 조정 + 우회 경로 설계.
 
-    def __init__(self, target_id: str):
-        self.target_id   = target_id
-        self.profile      = TargetProfile(target_id)
-        self.engine       = SpoofEngine(target_id)
-        self.decoy_router = DecoyRouter()
-        self.drone_router = DroneRouter()
-        self.controller   = AdaptiveController()
-        self._running     = False
-        self._success_n   = 0
-        self._total_n     = 0
+    GCS 프로세스와 공유 메모리를 쓰지 않고 콜백/텔레메트리로만 통신한다:
+      get_telemetry() → (real_lat, real_lon, blues, wp_remaining) | None
+      send_decoy(uid, lat, lon)      → GCS 레이더 포트로 위조 좌표 UDP 주입
+      send_waypoints(points)         → GCS(drone.py)로 우회 웨이포인트 UDP 전송
+      send_status(status_dict)       → GCS로 UI용 상태 UDP 전송
+      target                         → {'lat', 'lon'} 실제 드론 최종 목표 (고정)
+    """
+
+    def __init__(self, target_id: str,
+                 get_telemetry: Callable[[], Optional[tuple]],
+                 send_decoy: Callable[[str, float, float], None],
+                 send_waypoints: Callable[[list[tuple[float, float]]], None],
+                 send_status: Callable[[dict], None],
+                 target: dict):
+        self.target_id      = target_id
+        self.get_telemetry  = get_telemetry
+        self.send_status    = send_status
+        self.target         = target
+        self.profile        = TargetProfile(target_id)
+        self.engine          = SpoofEngine(target_id, send_decoy)
+        self.drone_router    = DroneRouter(send_waypoints)
+        self.controller       = AdaptiveController()
+        self._running        = False
+        self._success_n       = 0
+        self._total_n         = 0
         self._prev_spoof: Optional[tuple] = None
+        self._wp_remaining    = 0   # 최근 텔레메트리에서 받은 실제 드론 잔여 웨이포인트 수
 
     def _success_rate(self) -> float:
         return (self._success_n / self._total_n * 100) if self._total_n else 0.0
@@ -480,17 +363,14 @@ class AttackAgent:
         while self._running:
             t0 = time.time()
 
-            # Layer 1: 실제 위치 + 파란 드론 위치 수집
-            with state.lock:
-                real  = state.real_positions.get(self.target_id) \
-                     or state.units.get(self.target_id)
-                blues = [dict(u) for u in state.units.values()
-                         if u.get('type') != 'UNK']
-            if real is None:
+            # Layer 1: 실제 위치 + 파랑팀 위치 텔레메트리 (GCS에서 UDP 수신된 값)
+            telem = self.get_telemetry()
+            if telem is None:
                 time.sleep(interval)
                 continue
+            real_lat, real_lon, blues, wp_remaining = telem
+            self._wp_remaining = wp_remaining
 
-            real_lat, real_lon = real['lat'], real['lon']
             self.profile.update(real_lat, real_lon)
 
             if not self.profile.is_ready():
@@ -500,45 +380,20 @@ class AttackAgent:
             snap = self.profile.snapshot()
             self.engine.init_spoof(real_lat, real_lon)
 
-            # Layer 2: 위조 좌표(decoy) — 파란 드론 30km 이내 접근 시 활성화
-            def _dist_km(b):
-                return math.sqrt(
-                    ((b['lat'] - real_lat) * 111) ** 2 +
-                    ((b['lon'] - real_lon) * 111) ** 2
-                )
+            # Layer 2: 레이더 탐지 범위(서울 중심 반경) 진입 시 상시 위조
+            dist_from_radar_km = math.sqrt(
+                ((real_lat - RADAR_CENTER['lat']) * 111) ** 2 +
+                ((real_lon - RADAR_CENTER['lon']) * 111 * math.cos(math.radians(real_lat))) ** 2
+            )
+            in_range = dist_from_radar_km <= RADAR_RANGE_KM
 
-            threatening = [b for b in blues if _dist_km(b) < DECOY_TRIGGER_KM]
-
-            if threatening:
+            if in_range:
                 if not self.engine.active:
-                    # 최초 활성화 — decoy를 실제 위치에서 spawn
                     self.engine.spoof_lat = real_lat
                     self.engine.spoof_lon = real_lon
                     self.engine.active    = True
-                    nearest = min(threatening, key=_dist_km)
-                    print(f'[SPOOF] 활성화 — {nearest["id"]} 접근 ({_dist_km(nearest):.2f} km)')
-
-                # DecoyRouter 웨이포인트 추종
-                wp = self.decoy_router.current_target()
-                if wp and self.engine.near_waypoint(wp):
-                    self.decoy_router.advance()
-                    wp = self.decoy_router.current_target()
-
-                if wp:
-                    s_lat, s_lon = self.engine.step_decoy(wp[0], wp[1])
-                else:
-                    # 웨이포인트 없음 — 실제 드론 반대 방향으로 단순 이탈
-                    with state.lock:
-                        tgt = dict(state.drone_target)
-                    if tgt:
-                        # 목표 방향의 반대로 이탈
-                        heading_to_target = math.atan2(
-                            tgt['lon'] - real_lon, tgt['lat'] - real_lat)
-                        opp = heading_to_target + math.pi
-                        self.engine.spoof_lat += DECOY_SPEED * math.cos(opp)
-                        self.engine.spoof_lon += DECOY_SPEED * math.sin(opp)
-                    s_lat = self.engine.spoof_lat
-                    s_lon = self.engine.spoof_lon
+                    print(f'[SPOOF] 활성화 — 레이더 탐지 범위 진입 ({dist_from_radar_km:.1f}km)')
+                s_lat, s_lon = self.engine.step(snap)
             else:
                 if self.engine.active:
                     self.engine.deactivate()
@@ -551,32 +406,30 @@ class AttackAgent:
                 self._eval_success(real_lat, real_lon, *self._prev_spoof, s_lat, s_lon)
             self._prev_spoof = (s_lat, s_lon)
 
-            # Layer 3 + LLM ① ② 비동기 호출
+            # Layer 3 + LLM 비동기 호출
             threading.Thread(
                 target=self._async_llm,
                 args=(snap, s_lat, s_lon, real_lat, real_lon, blues),
                 daemon=True,
             ).start()
 
-            # 콘솔 출력
-            gap      = self.engine.gap_km(real_lat, real_lon)
-            risk     = self.controller.last_result.get('risk', '—')
-            near_txt = ', '.join(f'{b["id"]}:{_dist_km(b):.1f}km' for b in threatening) or '없음'
-            decoy_wp = f'WP{self.decoy_router.wp_index}/{len(self.decoy_router.waypoints)}' \
-                       if self.decoy_router.waypoints else 'NO_WP'
-            print(
-                f'[ATTACK] #{self.engine.inject_count:04d} | '
-                f'실제:({real_lat:.5f},{real_lon:.5f}) | '
-                f'위조:({s_lat:.5f},{s_lon:.5f}) | '
-                f'decoy:{"ON" if self.engine.active else "OFF"} {decoy_wp} | '
-                f'gap:{gap:.3f}km | 위협:{near_txt}'
-            )
+            # 콘솔 출력 — 실제로 위조가 주입 중일 때만 (위조 근거가 있을 때만 로그)
+            if self.engine.active:
+                gap = self.engine.gap_km(real_lat, real_lon)
+                print(
+                    f'[ATTACK] #{self.engine.inject_count:04d} | '
+                    f'실제:({real_lat:.5f},{real_lon:.5f}) | '
+                    f'위조:({s_lat:.5f},{s_lon:.5f}) | '
+                    f'레이더범위:{dist_from_radar_km:.1f}km | gap:{gap:.3f}km'
+                )
+
+            self.send_status(self.status(real_lat, real_lon, blues))
 
             elapsed = time.time() - t0
             time.sleep(max(0.0, interval - elapsed))
 
     def _async_llm(self, snap, s_lat, s_lon, real_lat, real_lon, blues):
-        # AdaptiveController — decoy step_size 조정
+        # AdaptiveController — 위조 step_size 조정
         if self.engine.active:
             result = self.controller.query(
                 snap, s_lat, s_lon,
@@ -588,57 +441,29 @@ class AttackAgent:
                 print(f'[ADAPT] risk={result.get("risk","?")} | '
                       f'step {old:.6f}→{self.engine.step_size:.6f} | {result.get("reason","")}')
 
-        with state.lock:
-            target = dict(state.drone_target)
-
-        # LLM ① DecoyRouter — decoy 유인 경로 갱신 (활성 + 웨이포인트 소진 시)
-        if self.engine.active and self.decoy_router.exhausted() and target:
-            threading.Thread(
-                target=self.decoy_router.request_route,
-                args=(real_lat, real_lon, s_lat, s_lon,
-                      target['lat'], target['lon'], blues),
-                daemon=True,
-            ).start()
-
-        # LLM ② DroneRouter — 실제 드론 우회 경로 갱신 (웨이포인트 소진 시)
-        if self.drone_router.needs_update() and target:
-            spoof_lat = self.engine.spoof_lat if self.engine.active else None
-            spoof_lon = self.engine.spoof_lon if self.engine.active else None
+        # DroneRouter — 실제 드론 우회 경로 갱신 (웨이포인트 소진 시, 파란 드론 물리적 회피)
+        target = self.target
+        if self._wp_remaining <= 0 and target:
             threading.Thread(
                 target=self.drone_router.request_route,
-                args=(real_lat, real_lon,
-                      target['lat'], target['lon'],
-                      spoof_lat, spoof_lon, blues),
+                args=(real_lat, real_lon, target['lat'], target['lon'], blues),
                 daemon=True,
             ).start()
-
 
     def start(self):
         self._running = True
-        with state.lock:
-            state.spoofed_ids.add(self.target_id)
         threading.Thread(target=self._loop, daemon=True).start()
 
     def stop(self):
         self._running = False
-        with state.lock:
-            state.spoofed_ids.discard(self.target_id)
-            real = state.real_positions.get(self.target_id)
-            if real and self.target_id in state.units:
-                state.units[self.target_id]['lat'] = real['lat']
-                state.units[self.target_id]['lon'] = real['lon']
-        print(f'[ATTACK] ■ {self.target_id} 스푸핑 중지 — 좌표 복원')
+        print(f'[ATTACK] ■ {self.target_id} 스푸핑 중지')
 
-    def status(self) -> dict:
-        with state.lock:
-            real   = state.real_positions.get(self.target_id) \
-                  or state.units.get(self.target_id) or {}
-            target = dict(state.drone_target)
-            wps    = list(state.drone_waypoints)
-            wp_idx = state.drone_wp_index
-            blues  = [dict(u) for u in state.units.values() if u.get('type') != 'UNK']
+    def status(self, real_lat: float = None, real_lon: float = None,
+               blues: list[dict] = None) -> dict:
+        real_lat = real_lat if real_lat is not None else self.profile.snapshot().get('lat', 0)
+        real_lon = real_lon if real_lon is not None else self.profile.snapshot().get('lon', 0)
+        blues    = blues if blues is not None else []
         snap = self.profile.snapshot()
-        rl, rn = real.get('lat', 0), real.get('lon', 0)
         sl, sn = self.engine.spoof_lat or 0, self.engine.spoof_lon or 0
 
         def dist_km(alat, alon, blat, blon):
@@ -646,50 +471,56 @@ class AttackAgent:
 
         blue_dists = [
             {'id': b['id'],
-             'dist_real_km':  dist_km(rl, rn, b['lat'], b['lon']),
+             'dist_real_km':  dist_km(real_lat, real_lon, b['lat'], b['lon']),
              'dist_decoy_km': dist_km(sl, sn, b['lat'], b['lon']) if self.engine.active else None}
             for b in blues
         ]
+        wp_index = max(0, self.drone_router.route_total - self._wp_remaining)
         return {
             'target_id':    self.target_id,
             'running':      self._running,
             'inject_count': self.engine.inject_count,
-            'real_lat':     real.get('lat'),
-            'real_lon':     real.get('lon'),
+            'real_lat':     real_lat,
+            'real_lon':     real_lon,
             'spoof_lat':    self.engine.spoof_lat,
             'spoof_lon':    self.engine.spoof_lon,
-            'gap_km':       round(self.engine.gap_km(
-                                real.get('lat', 0), real.get('lon', 0)), 3),
+            'gap_km':       round(self.engine.gap_km(real_lat, real_lon), 3),
             'step_size':    self.engine.step_size,
             'decoy_active': self.engine.active,
             'success_rate': round(self._success_rate(), 1),
             'llm_last':     self.controller.last_result,
             'profile':      snap,
-            'target':       target,
+            'target':       self.target,
             'route': {
-                'waypoints': wps,
-                'wp_index':  wp_idx,
-                'total':     len(wps),
+                'wp_index':  wp_index,
+                'total':     self.drone_router.route_total,
                 'last_msg':  self.drone_router.last_prompt,
-            },
-            'decoy_route': {
-                'last_msg': self.decoy_router.last_prompt,
             },
             'blue_dists': blue_dists,
         }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 싱글턴 인터페이스
+# 싱글턴 인터페이스 — attack_process.py 가 configure() 로 IO 훅을 먼저 등록한다
 # ══════════════════════════════════════════════════════════════════════════════
 _agent: Optional[AttackAgent] = None
+_io: dict = {}
+
+
+def configure(get_telemetry: Callable[[], Optional[tuple]],
+              send_decoy: Callable[[str, float, float], None],
+              send_waypoints: Callable[[list[tuple[float, float]]], None],
+              send_status: Callable[[dict], None],
+              target: dict):
+    _io.update(get_telemetry=get_telemetry, send_decoy=send_decoy,
+               send_waypoints=send_waypoints, send_status=send_status, target=target)
 
 
 def start(target_id: str = 'UNK-0'):
     global _agent
     if _agent and _agent._running:
         _agent.stop()
-    _agent = AttackAgent(target_id)
+    _agent = AttackAgent(target_id, **_io)
     _agent.start()
 
 

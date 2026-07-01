@@ -6,13 +6,16 @@ drone.py — 우리 팀 드론(주황, UNK-0) 인프로세스 시뮬레이터
 - state.real_positions['UNK-0'] 에 직접 기록 (UDP/radar 불필요)
 - unk_sim.py 는 더 이상 별도 실행하지 않아도 됨
 """
-import math, random, threading, time
+import math, os, random, threading, time
 import state
 
-UID           = 'UNK-0'
-DRONE_HZ      = 2.0
-DRONE_SPEED   = 0.00084     # deg/step @2Hz ≈ 720 km/h (3배속)
-WP_ARRIVE_DEG = 0.0005      # ≈ 55 m 이내 → 웨이포인트 도착
+UID                    = 'UNK-0'
+DRONE_HZ               = 2.0
+DRONE_BASE_SPEED       = 0.00028   # deg/step @2Hz ≈ 240 km/h — 실측 기준 속도(배속 적용 전)
+DRONE_SPEED_MULTIPLIER = 3.0       # 공격자 드론 배속 (수비 측 BLUE_SPEED_MULTIPLIER 1.8배보다 빠르게 유지)
+DRONE_SPEED            = DRONE_BASE_SPEED * DRONE_SPEED_MULTIPLIER   # ≈ 720 km/h
+WP_ARRIVE_DEG          = 0.0005    # ≈ 55 m 이내 → 웨이포인트 도착
+TARGET_ARRIVE_DEG      = 0.001     # ≈ 110 m 이내 → 최종 목표 도달(임무 완료) 판정
 
 # 출발 좌표 — DMZ 인근 (파주/연천 방면)
 START_LAT = 37.9200
@@ -66,6 +69,19 @@ def _loop():
         with state.lock:
             state.real_positions[UID] = {'lat': round(lat, 7), 'lon': round(lon, 7)}
             state.last_seen[UID] = time.time()
+
+        # 최종 목표 도달 판정 — 우회 웨이포인트가 모두 소진된 상태에서만
+        final_leg = target and not (wps and wp_idx < len(wps))
+        if final_leg:
+            dist_to_target = math.sqrt(
+                (lat - target['lat'])**2 + (lon - target['lon'])**2)
+            if dist_to_target < TARGET_ARRIVE_DEG:
+                with state.lock:
+                    state.mission_complete = True
+                print(f'[DRONE] ■ 목표 도달 — 임무 완료 (LAT {lat:.5f} LON {lon:.5f})')
+                time.sleep(3)   # 프론트엔드가 완료 화면을 표시할 시간 확보
+                print('[GCS] 임무 완료 — 프로그램 종료')
+                os._exit(0)
 
         elapsed = time.time() - t0
         time.sleep(max(0.0, interval - elapsed))

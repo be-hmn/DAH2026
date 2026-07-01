@@ -1,7 +1,7 @@
 import copy
 from flask import Blueprint, jsonify, request
 from config import PATHS
-import state, ai, attack, command
+import state, ai, attack_link, command
 
 bp = Blueprint('api', __name__)
 
@@ -9,7 +9,10 @@ bp = Blueprint('api', __name__)
 @bp.route('/api/state')
 def api_state():
     with state.lock:
-        res = {'units': list(copy.deepcopy(state.units).values())}
+        res = {
+            'units':            list(copy.deepcopy(state.units).values()),
+            'mission_complete': state.mission_complete,
+        }
     return jsonify(res)
 
 
@@ -42,14 +45,15 @@ def api_ai_latest():
 
 @bp.route('/api/attack/status')
 def api_attack_status():
-    return jsonify(attack.status())
+    with state.lock:
+        return jsonify(dict(state.attack_status))
 
 
 @bp.route('/api/attack/target', methods=['POST'])
 def api_attack_target():
-    d  = request.get_json(force=True)
+    d   = request.get_json(force=True)
     tid = d.get('target_id', 'UNK-0')
-    attack.set_target(tid)
+    attack_link.send_control({'cmd': 'set_target', 'target_id': tid})
     return jsonify({'ok': True, 'target_id': tid})
 
 
