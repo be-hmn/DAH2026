@@ -12,6 +12,8 @@ def api_state():
         res = {
             'units':            list(copy.deepcopy(state.units).values()),
             'mission_complete': state.mission_complete,
+            'intercepted':      state.intercepted,
+            'intercept_report': copy.deepcopy(state.intercept_report),
         }
     return jsonify(res)
 

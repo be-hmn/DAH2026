@@ -10,4 +10,6 @@ drone_wp_index: int    = 0    # 현재 추종 중인 웨이포인트 인덱스
 blue_orders: dict      = {}   # 파랑팀 지휘 명령: uid → {'lat', 'lon', 'mission'}
 attack_status: dict    = {'running': False}   # attack_process가 UDP로 보낸 최신 상태 (API 캐시)
 mission_complete: bool = False   # 침투 드론(UNK-0)이 목표 지점에 도달했는지 여부
+intercepted: bool       = False  # Defense Agent가 SPOOFED로 확정 판단해 드론을 요격했는지 여부
+intercept_report: dict  = {}     # 요격 근거 — {'uid','ts','final_reason','evidence':[...]}  (defense_agent.py가 기록)
 lock                   = threading.Lock()

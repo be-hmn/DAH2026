@@ -48,47 +48,55 @@ def _loop():
 
     interval = 1.0 / DRONE_HZ
     print(f'[DRONE] 초기 위치: LAT {lat:.5f} LON {lon:.5f} (DMZ 근처)')
+    intercepted_reported = False
 
     while True:
         t0 = time.time()
 
         with state.lock:
-            wps    = list(state.drone_waypoints)
-            wp_idx = state.drone_wp_index
-            target = dict(state.drone_target) if state.drone_target else None
+            wps         = list(state.drone_waypoints)
+            wp_idx      = state.drone_wp_index
+            target      = dict(state.drone_target) if state.drone_target else None
+            intercepted = state.intercepted
 
-        # 현재 웨이포인트 도착 확인 → 다음으로
-        if wps and wp_idx < len(wps):
-            wp = wps[wp_idx]
-            if math.sqrt((lat - wp[0])**2 + (lon - wp[1])**2) < WP_ARRIVE_DEG:
-                with state.lock:
-                    state.drone_wp_index += 1
-                    wp_idx += 1
+        if intercepted:
+            # Defense Agent가 SPOOFED로 확정 판단 — 목표 도달 전 작동 정지, 마지막 위치에 고정
+            if not intercepted_reported:
+                intercepted_reported = True
+                print(f'[DRONE] ■ Defense Agent에 요격됨 — 작동 정지 (LAT {lat:.5f} LON {lon:.5f})')
+        else:
+            # 현재 웨이포인트 도착 확인 → 다음으로
+            if wps and wp_idx < len(wps):
+                wp = wps[wp_idx]
+                if math.sqrt((lat - wp[0])**2 + (lon - wp[1])**2) < WP_ARRIVE_DEG:
+                    with state.lock:
+                        state.drone_wp_index += 1
+                        wp_idx += 1
 
-        # 목표 결정: 우회 웨이포인트 > 최종 목표
-        dest = None
-        if wps and wp_idx < len(wps):
-            dest = wps[wp_idx]
-        elif target:
-            dest = (target['lat'], target['lon'])
+            # 목표 결정: 우회 웨이포인트 > 최종 목표
+            dest = None
+            if wps and wp_idx < len(wps):
+                dest = wps[wp_idx]
+            elif target:
+                dest = (target['lat'], target['lon'])
 
-        # 이동
-        if dest:
-            dlat = dest[0] - lat
-            dlon = dest[1] - lon
-            dist = math.sqrt(dlat**2 + dlon**2)
-            if dist > 1e-9:
-                move = min(DRONE_SPEED, dist)
-                lat += (dlat / dist) * move
-                lon += (dlon / dist) * move
+            # 이동
+            if dest:
+                dlat = dest[0] - lat
+                dlon = dest[1] - lon
+                dist = math.sqrt(dlat**2 + dlon**2)
+                if dist > 1e-9:
+                    move = min(DRONE_SPEED, dist)
+                    lat += (dlat / dist) * move
+                    lon += (dlon / dist) * move
 
         with state.lock:
             state.real_positions[UID] = {'lat': round(lat, 7), 'lon': round(lon, 7)}
             state.last_seen[UID] = time.time()
         _emit_uplink(lat, lon)
 
-        # 최종 목표 도달 판정 — 우회 웨이포인트가 모두 소진된 상태에서만
-        final_leg = target and not (wps and wp_idx < len(wps))
+        # 최종 목표 도달 판정 — 요격되지 않았고, 우회 웨이포인트가 모두 소진된 상태에서만
+        final_leg = (not intercepted) and target and not (wps and wp_idx < len(wps))
         if final_leg:
             dist_to_target = math.sqrt(
                 (lat - target['lat'])**2 + (lon - target['lon'])**2)

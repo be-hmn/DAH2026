@@ -178,6 +178,29 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
 .mission-sub{margin-top:20px;font-size:15px;letter-spacing:2px;color:var(--txt-1);font-family:var(--fnt-mono);}
 .mission-detail{margin-top:10px;font-size:11px;letter-spacing:1px;color:var(--txt-3);font-family:var(--fnt-mono);}
 
+/* ── 요격(SPOOFED 확정) 오버레이 ── */
+#intercept-overlay{position:fixed;inset:0;z-index:9999;display:none;
+  align-items:center;justify-content:center;flex-direction:column;
+  background:radial-gradient(ellipse at center,#04170d 0%,#010603 85%);
+  animation:overlay-in .6s ease;}
+#intercept-overlay.show{display:flex;}
+.intercept-title{font-size:48px;font-weight:900;letter-spacing:8px;color:var(--green);
+  font-family:var(--fnt-mono);text-shadow:0 0 30px rgba(58,175,92,.8),0 0 60px rgba(58,175,92,.4);
+  animation:mission-pulse 1.4s ease-in-out infinite;}
+.intercept-sub{margin-top:18px;font-size:14px;letter-spacing:1.5px;color:var(--txt-1);font-family:var(--fnt-mono);}
+.intercept-reason{margin-top:14px;font-size:12px;color:var(--txt-1);max-width:640px;text-align:center;
+  line-height:1.6;padding:0 20px;}
+.intercept-evidence{margin-top:22px;width:min(640px,90vw);max-height:32vh;overflow-y:auto;
+  background:rgba(0,0,0,.35);border:1px solid rgba(58,175,92,.25);border-radius:2px;padding:10px 14px;}
+.intercept-ev-row{display:flex;gap:8px;align-items:baseline;padding:5px 0;
+  border-bottom:1px solid rgba(255,255,255,.05);font-size:11px;font-family:var(--fnt-mono);}
+.intercept-ev-row:last-child{border-bottom:none;}
+.intercept-ev-badge{font-size:9px;font-weight:700;letter-spacing:.8px;padding:1px 6px;border-radius:8px;flex-shrink:0;}
+.intercept-ev-badge.suspect{color:var(--amber);background:rgba(224,168,60,.14);}
+.intercept-ev-badge.spoofed{color:#ff4444;background:rgba(255,68,68,.16);}
+.intercept-ev-reason{color:var(--txt-2);font-family:var(--fnt-ui);}
+.intercept-detail{margin-top:16px;font-size:11px;letter-spacing:1px;color:var(--txt-3);font-family:var(--fnt-mono);}
+
 /* ── 지휘 명령 패널 ── */
 .section-cmd{background:linear-gradient(160deg,#0a0e1c 0%,var(--surface) 100%);
              border-top:2px solid #7755cc !important;padding:18px 20px;}
@@ -214,6 +237,13 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
   <div class="mission-title">ATTACK COMPLETED</div>
   <div class="mission-sub">침투 드론이 목표 지점에 도달 — 임무 성공</div>
   <div class="mission-detail" id="mission-ts">--:--:--</div>
+</div>
+<div id="intercept-overlay">
+  <div class="intercept-title">INTERCEPTED</div>
+  <div class="intercept-sub">Defense Agent가 GPS 스푸핑을 확정 판단 — 목표 도달 전 작동 정지</div>
+  <div class="intercept-reason" id="intercept-reason"></div>
+  <div class="intercept-evidence" id="intercept-evidence"></div>
+  <div class="intercept-detail" id="intercept-ts">--:--:--</div>
 </div>
 <div id="root">
 
@@ -502,7 +532,7 @@ function renderUnits(units){
   }
 }
 
-var seq=0,t0=Date.now(),missionEnded=false;
+var seq=0,t0=Date.now(),missionEnded=false,intercepted=false;
 function showMissionComplete(){
   if(missionEnded)return;
   missionEnded=true;
@@ -511,8 +541,32 @@ function showMissionComplete(){
   document.getElementById('mission-ts').textContent='종료 시각 '
     +String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0')+' KST';
 }
+function verdictLabel(v){return v==='spoofed'?'SPOOFED':'SUSPECT';}
+function showIntercepted(report){
+  if(intercepted)return;
+  intercepted=true;
+  report = report || {};
+  document.getElementById('intercept-reason').textContent = report.final_reason || '';
+  var evidence = report.evidence || [];
+  document.getElementById('intercept-evidence').innerHTML = evidence.length
+    ? evidence.map(function(e){
+        var t=new Date((e.ts||0)*1000);
+        var ts=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')+':'+String(t.getSeconds()).padStart(2,'0');
+        return '<div class="intercept-ev-row">'
+          +'<span class="coord-lbl">'+ts+'</span>'
+          +'<span class="intercept-ev-badge '+(e.verdict==='spoofed'?'spoofed':'suspect')+'">'+verdictLabel(e.verdict)+'</span>'
+          +'<span class="intercept-ev-reason">'+esc(e.reason||'')+'</span>'
+          +'</div>';
+      }).join('')
+    : '';
+  document.getElementById('intercept-overlay').classList.add('show');
+  var n=new Date();
+  document.getElementById('intercept-ts').textContent='요격 시각 '
+    +String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0')+' KST';
+}
 function tick(data){
   if(data.mission_complete){showMissionComplete();}
+  if(data.intercepted){showIntercepted(data.intercept_report);}
   seq++; document.getElementById('seq-val').textContent=seq; document.getElementById('ftr-seq').textContent='MAVLink SEQ: '+seq;
   var units=data.units||[];
   units.forEach(function(u){

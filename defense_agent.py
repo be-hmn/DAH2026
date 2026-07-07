@@ -23,10 +23,13 @@ CHECK_EVERY = 2.0   # 감시 주기 (초)
 # 오탐(false positive)되므로, 반드시 drone.py 값을 따라가도록 유지한다.
 MAX_SPEED_KMH = round(DRONE_SPEED * 111 * DRONE_HZ * 3600)
 
-_lock       = threading.Lock()
-_latest: dict    = {}   # uid -> {'verdict','reason','ts','speed_kmh','heading'}
-_history: dict   = {}   # uid -> deque[(ts, speed_kmh, heading, lat, lon)]
-_last_call: dict = {}   # uid -> 마지막 판단 시각
+VERDICT_LOG_LEN = 30    # uid별 보관할 과거 판정 개수 — SPOOFED 확정 시 근거로 묶어서 보여줄 이력
+
+_lock         = threading.Lock()
+_latest: dict      = {}   # uid -> {'verdict','reason','ts','speed_kmh','heading'}
+_history: dict     = {}   # uid -> deque[(ts, speed_kmh, heading, lat, lon)]  (LLM 입력용 원시 샘플)
+_verdict_log: dict = {}   # uid -> deque[{'ts','verdict','reason','speed_kmh','heading'}]  (판정 이력, 요격 근거용)
+_last_call: dict   = {}   # uid -> 마지막 판단 시각
 
 
 def _parse_json(text: str) -> dict:
@@ -95,25 +98,49 @@ JSON만 출력 (마크다운 없음):
         if not text:
             return
 
-        data = _parse_json(text)
+        data    = _parse_json(text)
+        verdict = data.get('verdict', 'normal')
+        reason  = data.get('reason', '')
         _, spd, hdg, _, _ = samples[-1]
+        entry = {'ts': time.time(), 'verdict': verdict, 'reason': reason,
+                  'speed_kmh': spd, 'heading': hdg}
         with _lock:
-            _latest[uid] = {
-                'verdict':   data.get('verdict', 'normal'),
-                'reason':    data.get('reason', ''),
-                'ts':        time.time(),
-                'speed_kmh': spd,
-                'heading':   hdg,
-            }
-        print(f"[DEFENSE] {uid} 판단: {data.get('verdict')} — {data.get('reason', '')}")
+            _latest[uid] = dict(entry)
+            log = _verdict_log.setdefault(uid, deque(maxlen=VERDICT_LOG_LEN))
+            log.append(entry)
+            evidence = [e for e in log if e['verdict'] != 'normal']   # 의심~확정까지의 판정만 근거로 추림
+        print(f"[DEFENSE] {uid} 판단: {verdict} — {reason}")
+
+        if verdict == 'spoofed':
+            _trigger_intercept(uid, entry, evidence)
     except Exception as e:
         print(f'[DEFENSE] 오류: {e}')
+
+
+def _trigger_intercept(uid: str, final: dict, evidence: list):
+    """SPOOFED 확정 — 지금까지 쌓인 의심 판정들을 근거로 묶어 요격 보고서를 만들고
+    드론(drone.py)의 작동을 정지시킨다. 최초 1회만 발동."""
+    with state.lock:
+        if state.intercepted:
+            return
+        state.intercepted = True
+        state.intercept_report = {
+            'uid':          uid,
+            'ts':           final['ts'],
+            'final_reason': final['reason'],
+            'speed_kmh':    final['speed_kmh'],
+            'heading':      final['heading'],
+            'evidence':     [dict(e) for e in evidence],
+        }
+    print(f"[DEFENSE] ■ {uid} SPOOFED 확정 — 요격, 침투 드론 작동 정지 (누적 근거 {len(evidence)}건)")
 
 
 def _watcher():
     while True:
         time.sleep(CHECK_EVERY)
         with state.lock:
+            if state.intercepted:   # 이미 요격 확정 — 더 판단할 필요 없음
+                continue
             unk = {uid: dict(u) for uid, u in state.units.items() if u.get('type') == 'UNK'}
 
         now = time.time()
@@ -123,6 +150,7 @@ def _watcher():
                     _history.pop(uid, None)
                     _last_call.pop(uid, None)
                     _latest.pop(uid, None)
+                    _verdict_log.pop(uid, None)
 
         for uid, u in unk.items():
             sample = (now, u.get('speed_kmh', 0.0), u.get('heading', 0.0), u['lat'], u['lon'])

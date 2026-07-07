@@ -111,7 +111,7 @@ uv run unk_sim.py [N]
 
 | 엔드포인트 | 메서드 | 설명 |
 |---|---|---|
-| `/api/state` | GET | 전체 유닛 위치 반환 |
+| `/api/state` | GET | 전체 유닛 위치 + `mission_complete`/`intercepted`(+`intercept_report`) 반환 |
 | `/api/move` | POST | 유닛 위치 수동 이동 |
 | `/api/ai/latest` | GET | 최신 AI 분석 결과 반환 |
 | `/api/defense/latest` | GET | Defense Agent의 uid별 이상탐지 판단(`verdict`/`reason`/`speed_kmh`/`heading`) 반환 |
@@ -157,6 +157,8 @@ uv run unk_sim.py [N]
 - 위치 변화가 매 샘플 지나치게 규칙적인 패턴을 보이는지
 
 **판정 결과**: `normal` / `suspect` / `spoofed` 3단계 + 근거 한 문장, `/api/defense/latest`로 노출. UI 우측 하단 패널에 실시간 표시.
+
+**요격(Intercept)**: 특정 접촉이 `spoofed`로 확정 판단되면 그 순간까지 쌓인 `suspect`/`spoofed` 판정 이력 전체를 근거로 묶어 `state.intercept_report`에 기록하고, 침투 드론(`drone.py`)의 이동을 그 자리에서 정지시킨다 — 목표(롯데타워) 도달 전이면 임무는 실패로 끝난다. `/api/state`의 `intercepted`/`intercept_report` 필드로 노출되며, UI에 근거 목록과 함께 전체 화면 배너로 표시된다(공격 성공 시의 `ATTACK COMPLETED` 배너와 대칭되는 결말). attack_process는 이 사실을 모르므로 계속 좌표를 흘려보내지만, 드론이 더 이상 움직이지 않아 위조 트랙도 자연히 정지한다.
 
 공격 측 `AdaptiveController`(attack_process.py)가 정확히 이 속도·방향 일관성을 실제 드론과 비슷하게 유지해 탐지를 피하려 드는 상대이므로, 두 LLM이 같은 축(물리적 자연스러움)을 두고 공방을 벌이는 구조다.
 
