@@ -1,3 +1,5 @@
+import os
+
 UNITS_INIT = [
     {'id': 'ALPHA-1',   'type': 'UAV', 'lat': 37.5340, 'lon': 126.9850},
     {'id': 'BRAVO-2',   'type': 'UAV', 'lat': 37.5680, 'lon': 126.9280},
@@ -22,11 +24,20 @@ PATHS = {
 BLUE_SPEED_MULTIPLIER = 1.8
 
 UNK_TTL    = 5.0
-RADAR_PORT = 15550   # attack_process → GCS radar.py (스푸핑 좌표 주입, MITM 지점)
+RADAR_PORT = 15550   # attack_process → GCS radar.py (조작된 좌표 주입 — 피해자가 실제로 수신하는 포트)
 
 RADAR_CENTER   = {'lat': 37.5665, 'lon': 126.9780}   # 레이더 기준점 — 서울 중심(시청)
 RADAR_RANGE_KM = 50.0                                 # 레이더 탐지 반경 — 이 안에 들어오면 상시 탐지·스푸핑
 
+# drone.py(진짜 신호) → attack_process 로만 가는 업링크. GCS radar.py 는 이 포트를 듣지 않는다 —
+# 원본 신호는 attack_process 가 가로채 폐기하고(차단), 조작된 값만 RADAR_PORT 로 재주입한다.
+RADAR_UPLINK_PORT = 15553
+
 # attack_process.py 를 별도 프로세스로 분리하기 위한 UDP 채널
-ATTACK_IN_PORT  = 15551   # GCS → attack_process (텔레메트리: 실제 위치/파랑팀 위치, 컨트롤 명령)
+ATTACK_IN_PORT  = 15551   # GCS → attack_process (텔레메트리: 파랑팀 위치, 컨트롤 명령)
 ATTACK_OUT_PORT = 15552   # attack_process → GCS (상태 조회용 status, 드론 우회 waypoints)
+
+# Attack Agent(attack_process.py) vs Defense Agent(defense_agent.py) 공방전 비교 실험용 스위치.
+# attack_process 는 GCS와 완전히 독립된 프로세스라 이 값을 몰라도 동일하게 스푸핑을 수행하므로,
+# GCS 를 이 값만 바꿔 두 번 기동하면 "Defense Agent 유무"에 따른 차이만 격리해서 비교할 수 있다.
+DEFENSE_AGENT_ENABLED = os.environ.get('DEFENSE_AGENT_ENABLED', '1') != '0'

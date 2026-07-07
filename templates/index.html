@@ -131,6 +131,27 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
 .ai-ts{font-size:9px;font-family:var(--fnt-mono);color:var(--txt-3);}
 @keyframes ai-pulse{0%,100%{box-shadow:0 0 5px var(--cyan);}50%{box-shadow:0 0 12px var(--cyan);}}
 
+/* ── Defense Agent (이상탐지) ── */
+.section-defense{background:linear-gradient(160deg,#210b0b 0%,var(--surface) 100%);
+            border-top:2px solid #e05555 !important;padding:18px 20px;}
+.sec-ttl-defense{font-size:10px;font-weight:700;letter-spacing:2.5px;color:#e05555;text-transform:uppercase;}
+.defense-dot{width:6px;height:6px;border-radius:50%;background:var(--txt-3);}
+.defense-dot.on{background:#66bb66;box-shadow:0 0 8px #66bb66;}
+.defense-dot.on.warn{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:ai-pulse 2s infinite;}
+.defense-dot.on.alert{background:#ff4444;box-shadow:0 0 8px #ff4444;animation:ai-pulse .8s infinite;}
+.defense-body{font-size:12px;line-height:1.6;color:var(--txt-1);
+         background:rgba(0,0,0,.35);border:1px solid rgba(224,85,85,.15);
+         padding:10px 14px;border-radius:2px;min-height:60px;}
+.df-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
+.df-row:first-child{margin-top:0;}
+.df-id{font-family:var(--fnt-mono);font-size:10px;color:var(--txt-2);min-width:52px;}
+.df-verdict{font-size:9px;font-weight:700;letter-spacing:0.8px;padding:1px 6px;border-radius:8px;}
+.df-ok{color:#66bb66;background:rgba(102,187,102,.12);}
+.df-warn{color:var(--amber);background:rgba(224,168,60,.12);}
+.df-bad{color:#ff4444;background:rgba(255,68,68,.14);}
+.df-kine{font-size:9px;font-family:var(--fnt-mono);color:var(--txt-3);}
+.df-reason{font-size:10px;color:var(--txt-3);margin:2px 0 4px 60px;}
+
 /* ── 푸터 ── */
 .ftr-lbl{font-size:9px;font-family:var(--fnt-mono);color:var(--txt-3);letter-spacing:0.5px;}
 
@@ -271,6 +292,22 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
           </div>
         </div>
 
+        <!-- ── 방어 에이전트(이상탐지) 패널 ── -->
+        <div class="section section-defense">
+          <div class="sec-hdr" style="margin-bottom:12px;">
+            <span class="sec-ttl-defense">Defense Agent</span>
+            <div class="ai-monitor">
+              <span class="defense-dot" id="defense-dot"></span>
+              <span>ANOMALY WATCH</span>
+            </div>
+          </div>
+          <div class="defense-body" id="defense-text">레이더 접촉 없음 — 감시 대기 중</div>
+          <div class="ai-footer">
+            <span></span>
+            <span class="ai-ts" id="defense-ts">—</span>
+          </div>
+        </div>
+
         <!-- ── 지휘 명령 패널 ── -->
         <div class="section section-cmd">
           <div class="sec-hdr" style="margin-bottom:12px;">
@@ -399,6 +436,12 @@ var radarActive=false;
 var openCards={};
 var CHEV='<svg width="8" height="10" viewBox="0 0 8 10"><polyline points="2,2 6,5 2,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+function esc(s){
+  return String(s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
 function renderUnits(units){
   var frd=units.filter(function(u){return u.type!=='UNK';});
   var unk=units.filter(function(u){return u.type==='UNK';});
@@ -411,7 +454,7 @@ function renderUnits(units){
       +'<div class="card-strip">'
       +'<div class="card-strip-left">'
       +'<span class="card-chev'+(isOpen?' open':'')+'">'+CHEV+'</span>'
-      +'<span class="card-id">'+u.id+'</span>'
+      +'<span class="card-id">'+esc(u.id)+'</span>'
       +'</div>'
       +typeTag(u.type)
       +'</div>'
@@ -442,12 +485,16 @@ function renderUnits(units){
     unkEl.innerHTML=unk.map(function(u){
       return '<div class="unk-card">'
         +'<div class="card-strip" style="cursor:default;">'
-        +'<span class="card-id unk">'+u.id+'</span>'
+        +'<span class="card-id unk">'+esc(u.id)+'</span>'
         +typeTag(u.type)
         +'</div>'
         +'<div class="card-coords" style="border-top:1px solid rgba(255,255,255,.05);padding:7px 12px 5px;">'
         +'<span><span class="coord-lbl">LAT</span><span class="coord-val amber">'+u.lat.toFixed(5)+'</span></span>'
         +'<span><span class="coord-lbl">LON</span><span class="coord-val amber">'+u.lon.toFixed(5)+'</span></span>'
+        +'</div>'
+        +'<div class="card-coords" style="padding:0 12px 7px;">'
+        +'<span><span class="coord-lbl">SPD</span><span class="coord-val amber">'+(u.speed_kmh||0).toFixed(0)+'km/h</span></span>'
+        +'<span><span class="coord-lbl">HDG</span><span class="coord-val amber">'+(u.heading||0).toFixed(0)+'°</span></span>'
         +'</div>'
         +'<div class="card-ftr"><span class="rx-dot amber"></span><span class="rx-lbl">RADAR · 2Hz</span></div>'
         +'</div>';
@@ -514,10 +561,42 @@ function pollAI(){
   }).catch(function(){});
 }
 
+function pollDefense(){
+  fetch('/api/defense/latest').then(function(r){return r.json();}).then(function(d){
+    var ids  = Object.keys(d);
+    var dot  = document.getElementById('defense-dot');
+    var body = document.getElementById('defense-text');
+    var ts   = document.getElementById('defense-ts');
+    if(!ids.length){
+      dot.classList.remove('on','warn','alert');
+      body.textContent = '레이더 접촉 없음 — 감시 대기 중';
+      ts.textContent = '—';
+      return;
+    }
+    var worst = 'normal';
+    body.innerHTML = ids.map(function(uid){
+      var v = d[uid];
+      if(v.verdict === 'spoofed') worst = 'spoofed';
+      else if(v.verdict === 'suspect' && worst !== 'spoofed') worst = 'suspect';
+      var cls = v.verdict === 'spoofed' ? 'df-bad' : (v.verdict === 'suspect' ? 'df-warn' : 'df-ok');
+      return '<div class="df-row"><span class="df-id">'+esc(uid)+'</span>'
+        +'<span class="df-verdict '+cls+'">'+esc((v.verdict||'normal').toUpperCase())+'</span>'
+        +'<span class="df-kine">'+v.speed_kmh.toFixed(0)+'km/h · '+v.heading.toFixed(0)+'°</span></div>'
+        +'<div class="df-reason">'+esc(v.reason||'')+'</div>';
+    }).join('');
+    dot.classList.add('on');
+    dot.classList.toggle('warn', worst==='suspect');
+    dot.classList.toggle('alert', worst==='spoofed');
+    var latestTs = Math.max.apply(null, ids.map(function(uid){return d[uid].ts;}));
+    var dt = new Date(latestTs*1000);
+    ts.textContent = String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0')+':'+String(dt.getSeconds()).padStart(2,'0');
+  }).catch(function(){});
+}
+
 function poll(){fetch('/api/state').then(function(r){return r.json();}).then(tick).catch(function(){});}
 
-setInterval(poll,500); setInterval(clk,1000); setInterval(pollAI,3000);
-poll(); clk(); pollAI();
+setInterval(poll,500); setInterval(clk,1000); setInterval(pollAI,3000); setInterval(pollDefense,3000);
+poll(); clk(); pollAI(); pollDefense();
 
 // ── 지휘 명령 ──
 var cmdSubmit = document.getElementById('cmd-submit');

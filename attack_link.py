@@ -1,7 +1,9 @@
 """
 attack_link.py — GCS ↔ attack_process.py(별도 프로세스) UDP 연결
 
-송신: 2Hz, 파랑팀 위치 + 실제 침투 드론(UNK-0) 위치 + 잔여 웨이포인트 수 → attack_process
+송신: 2Hz, 파랑팀 위치 + 잔여 웨이포인트 수 → attack_process
+  (실제 침투 드론(UNK-0) 위치는 이 채널로 보내지 않는다 — drone.py 가 RADAR_UPLINK_PORT 로
+   직접 송신하고 attack_process 가 그걸 가로채 얻는다. 가로채기 지점을 하나로 유지하기 위함)
 수신: attack_process가 보낸 status(UI 캐시) / waypoints(드론 우회 경로) 를 state에 반영
 """
 import json, socket, threading, time
@@ -17,16 +19,14 @@ def _send_telemetry():
     while True:
         with state.lock:
             blues = [dict(u) for u in state.units.values() if u.get('type') != 'UNK']
-            drone = dict(state.real_positions.get(DRONE_UID, {}))
             wp_remaining     = max(0, len(state.drone_waypoints) - state.drone_wp_index)
             mission_complete = state.mission_complete
-        if drone:
-            pkt = {'type': 'telemetry', 'blues': blues, 'drone': drone,
-                   'wp_remaining': wp_remaining, 'mission_complete': mission_complete}
-            try:
-                _sock.sendto(json.dumps(pkt).encode(), ('127.0.0.1', ATTACK_IN_PORT))
-            except Exception as e:
-                print(f'[ATTACK-LINK] 송신 오류: {e}')
+        pkt = {'type': 'telemetry', 'blues': blues,
+               'wp_remaining': wp_remaining, 'mission_complete': mission_complete}
+        try:
+            _sock.sendto(json.dumps(pkt).encode(), ('127.0.0.1', ATTACK_IN_PORT))
+        except Exception as e:
+            print(f'[ATTACK-LINK] 송신 오류: {e}')
         time.sleep(interval)
 
 

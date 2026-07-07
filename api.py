@@ -1,7 +1,7 @@
 import copy
 from flask import Blueprint, jsonify, request
 from config import PATHS
-import state, ai, attack_link, command
+import state, ai, attack_link, command, defense_agent
 
 bp = Blueprint('api', __name__)
 
@@ -41,6 +41,11 @@ def api_move():
 @bp.route('/api/ai/latest')
 def api_ai_latest():
     return jsonify(ai.latest())
+
+
+@bp.route('/api/defense/latest')
+def api_defense_latest():
+    return jsonify(defense_agent.latest())
 
 
 @bp.route('/api/attack/status')
