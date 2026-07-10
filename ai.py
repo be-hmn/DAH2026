@@ -1,8 +1,9 @@
 import copy, math, os, time, threading
 import state
 
-PROXIMITY_KM = 5.0
-COOLDOWN     = 15.0  # 연속 호출 방지 (초)
+PROXIMITY_KM   = 5.0
+COOLDOWN       = 15.0   # 이벤트 연속 호출 방지 (초)
+PERIODIC_EVERY = 30.0   # 이벤트 없어도 주기적 분석 간격 (초)
 
 _latest       = {'text': None, 'event': None, 'ts': None}
 _prev_unks    = set()
@@ -57,24 +58,39 @@ def _call_gemini(event_desc, snapshot):
     try:
         import os as _os
         from google import genai
-        # 시스템 GOOGLE_API_KEY 충돌 방지: 명시적으로 GEMINI_API_KEY만 사용
         _saved = _os.environ.pop('GOOGLE_API_KEY', None)
         client = genai.Client(api_key=api_key)
         if _saved is not None:
             _os.environ['GOOGLE_API_KEY'] = _saved
-        resp   = client.models.generate_content(model='gemini-2.5-flash-lite', contents=prompt)
-        with _lock:
-            _latest['text']  = resp.text.strip()
-            _latest['event'] = event_desc
-            _latest['ts']    = time.time()
-            _last_call_ts    = time.time()
-        print(f'[AI] 분석 완료: {event_desc}')
+
+        text = None
+        for attempt in range(3):
+            try:
+                resp = client.models.generate_content(model='gemini-2.5-flash-lite', contents=prompt)
+                text = resp.text.strip()
+                break
+            except Exception as e:
+                if '503' in str(e) or 'UNAVAILABLE' in str(e):
+                    wait = 2 ** attempt
+                    print(f'[AI] 503 재시도 {attempt+1}/3 ({wait}s 대기)')
+                    time.sleep(wait)
+                else:
+                    raise
+
+        if text:
+            with _lock:
+                _latest['text']  = text
+                _latest['event'] = event_desc
+                _latest['ts']    = time.time()
+                _last_call_ts    = time.time()
+            print(f'[AI] 분석 완료: {event_desc}')
     except Exception as e:
         print(f'[AI] Gemini 오류: {e}')
 
 
 def _watcher():
     global _prev_unks, _prev_alerts, _last_call_ts
+    _last_periodic = 0.0
     while True:
         time.sleep(2.0)
         with state.lock:
@@ -96,8 +112,16 @@ def _watcher():
         _prev_unks   = cur_unks
         _prev_alerts = cur_alerts
 
-        if events and time.time() - _last_call_ts >= COOLDOWN:
+        now = time.time()
+        if events and now - _last_call_ts >= COOLDOWN:
             desc = ' / '.join(events)
+            threading.Thread(target=_call_gemini, args=(desc, snapshot), daemon=True).start()
+        elif not events and now - _last_periodic >= PERIODIC_EVERY and now - _last_call_ts >= COOLDOWN:
+            # 이벤트 없어도 주기적으로 전장 상황 분석
+            _last_periodic = now
+            unk_ids = ', '.join(cur_unks) if cur_unks else '없음'
+            alert_cnt = len(cur_alerts)
+            desc = f'정기 전장 분석 — 외부 UAV: {unk_ids} | 근접 경보: {alert_cnt}건'
             threading.Thread(target=_call_gemini, args=(desc, snapshot), daemon=True).start()
 
 

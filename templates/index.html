@@ -140,8 +140,72 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
 /* ── 빈 상태 ── */
 .empty{font-size:10px;color:var(--txt-3);padding:4px 0;letter-spacing:0.5px;}
 
+/* ── Attack Status 패널 ── */
+.section-atk{background:linear-gradient(160deg,#1a0808 0%,var(--surface) 100%);
+             border-top:2px solid #cc3333 !important;padding:18px 20px;}
+.sec-ttl-atk{font-size:10px;font-weight:700;letter-spacing:2.5px;color:#ff4444;text-transform:uppercase;}
+.atk-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+.atk-cell{background:rgba(0,0,0,.35);border:1px solid #2a1010;border-radius:2px;padding:8px 10px;}
+.atk-lbl{font-size:8px;letter-spacing:1.5px;color:#884444;margin-bottom:4px;}
+.atk-val{font-size:16px;font-family:var(--fnt-mono);color:#ff6666;font-weight:700;}
+.atk-val.ok{color:#3aaf5c;}
+.atk-val.warn{color:var(--amber);}
+.atk-bar-wrap{background:rgba(0,0,0,.4);border:1px solid #2a1010;border-radius:2px;
+              height:6px;overflow:hidden;margin-top:4px;}
+.atk-bar{height:100%;background:linear-gradient(90deg,#cc2222,#ff4444);transition:width .5s ease;border-radius:2px;}
+.atk-llm{background:rgba(0,0,0,.3);border:1px solid rgba(255,68,68,.2);
+         border-left:3px solid #cc3333;padding:8px 11px;border-radius:2px;margin-top:8px;}
+.atk-llm-lbl{font-size:8px;letter-spacing:1.8px;color:#884444;margin-bottom:4px;}
+.atk-llm-txt{font-size:10px;color:var(--txt-2);word-break:break-word;}
+.atk-coords{display:flex;gap:12px;margin-top:8px;background:rgba(0,0,0,.3);
+            border:1px solid #2a1010;padding:8px 10px;border-radius:2px;}
+.atk-coord-col{flex:1;}
+.atk-coord-lbl{font-size:7.5px;letter-spacing:1.2px;margin-bottom:4px;}
+.atk-coord-lbl.real{color:#5588aa;}
+.atk-coord-lbl.spoof{color:#cc4444;}
+.atk-coord-val{font-size:10px;font-family:var(--fnt-mono);color:var(--txt-1);}
+
+/* ── Route / Reaction 패널 ── */
+.atk-route{background:rgba(0,0,0,.3);border:1px solid #2a1010;border-radius:2px;padding:8px 10px;margin-top:8px;}
+.atk-route-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.atk-route-ttl{font-size:8px;letter-spacing:1.5px;color:#884444;}
+.atk-wp-prog{font-size:12px;font-family:var(--fnt-mono);color:#ff8888;font-weight:700;}
+.atk-route-msg{font-size:9px;color:var(--txt-3);margin-top:5px;font-style:italic;}
+
 @keyframes ai-flash{from{background:#0a2020;}to{background:var(--bg);}}
+@keyframes atk-flash{from{background:#200808;}to{background:rgba(0,0,0,.35);}}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.25;}}
+
+/* ── 지휘 명령 패널 ── */
+.section-cmd{background:linear-gradient(160deg,#0a0e1c 0%,var(--surface) 100%);
+             border-top:2px solid #7755cc !important;padding:18px 20px;}
+.sec-ttl-cmd{font-size:10px;font-weight:700;letter-spacing:2.5px;color:#aa88ff;text-transform:uppercase;}
+.cmd-reply{font-size:12px;line-height:1.7;color:var(--txt-1);
+           background:rgba(0,0,0,.35);border:1px solid rgba(120,80,220,.2);
+           border-left:3px solid #7755cc;padding:10px 12px;border-radius:2px;
+           margin-bottom:10px;min-height:48px;white-space:pre-wrap;word-break:break-word;}
+.cmd-orders{margin-bottom:10px;}
+.cmd-order-row{display:flex;align-items:center;justify-content:space-between;
+               padding:4px 8px;background:rgba(80,40,160,.15);border:1px solid rgba(120,80,220,.25);
+               border-radius:2px;margin-bottom:4px;font-size:10px;font-family:var(--fnt-mono);}
+.cmd-order-id{color:#aa88ff;font-weight:700;min-width:72px;}
+.cmd-order-mission{color:var(--txt-2);flex:1;padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cmd-order-clear{cursor:pointer;color:#664488;font-size:9px;padding:1px 5px;border:1px solid #442266;
+                 border-radius:2px;background:rgba(0,0,0,.3);}
+.cmd-order-clear:hover{color:#cc88ff;border-color:#aa66ee;}
+.cmd-input-wrap{display:flex;gap:6px;align-items:flex-end;}
+.cmd-input{flex:1;background:rgba(0,0,0,.45);border:1px solid rgba(120,80,220,.35);border-radius:2px;
+           color:var(--txt-1);font-size:11px;padding:7px 10px;font-family:var(--fnt-ui);
+           resize:none;line-height:1.5;outline:none;min-height:52px;}
+.cmd-input::placeholder{color:var(--txt-3);}
+.cmd-input:focus{border-color:#7755cc;}
+.cmd-submit{background:#331a66;border:1px solid #7755cc;color:#aa88ff;font-size:10px;
+            font-weight:700;letter-spacing:1px;padding:8px 14px;border-radius:2px;
+            cursor:pointer;white-space:nowrap;height:52px;min-width:52px;}
+.cmd-submit:hover{background:#4422aa;}
+.cmd-submit:disabled{opacity:.4;cursor:not-allowed;}
+.cmd-thinking{font-size:9px;color:#7755cc;letter-spacing:1px;margin-top:6px;display:none;}
+.cmd-thinking.on{display:block;animation:blink 1s infinite;}
 </style></head>
 <body>
 <div id="root">
@@ -202,6 +266,93 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
           </div>
         </div>
 
+        <!-- ── ATTACK STATUS 패널 ── -->
+        <div class="section section-atk">
+          <div class="sec-hdr" style="margin-bottom:14px;">
+            <span class="sec-ttl-atk">⚠ Attack Agent</span>
+            <span id="atk-status-badge" style="font-size:9px;font-family:var(--fnt-mono);color:#884444;
+              background:#1a0808;border:1px solid #3a1010;padding:1px 8px;border-radius:10px;">IDLE</span>
+          </div>
+
+          <!-- ── decoy 활성 시에만 표시 ── -->
+          <div id="atk-decoy-section" style="display:none">
+            <div class="atk-grid">
+              <div class="atk-cell">
+                <div class="atk-lbl">INJECT COUNT</div>
+                <div class="atk-val" id="atk-inject">0</div>
+              </div>
+              <div class="atk-cell">
+                <div class="atk-lbl">GAP (실제↔위조)</div>
+                <div class="atk-val" id="atk-dist">—</div>
+              </div>
+              <div class="atk-cell">
+                <div class="atk-lbl">STEP SIZE (m)</div>
+                <div class="atk-val" id="atk-step">—</div>
+              </div>
+              <div class="atk-cell">
+                <div class="atk-lbl">SUCCESS RATE</div>
+                <div class="atk-val" id="atk-rate">—</div>
+              </div>
+              <div class="atk-cell">
+                <div class="atk-lbl">SPOOF SPEED</div>
+                <div class="atk-val" id="atk-thresh">—</div>
+              </div>
+              <div class="atk-cell">
+                <div class="atk-lbl">RISK LEVEL</div>
+                <div class="atk-val" id="atk-risk">—</div>
+              </div>
+            </div>
+
+            <div style="font-size:8px;letter-spacing:1.2px;color:#884444;margin-bottom:4px;">SUCCESS RATE</div>
+            <div class="atk-bar-wrap">
+              <div class="atk-bar" id="atk-bar" style="width:0%"></div>
+            </div>
+
+            <div class="atk-coords">
+              <div class="atk-coord-col">
+                <div class="atk-coord-lbl real">REAL POSITION</div>
+                <div class="atk-coord-val" id="atk-real-lat">—</div>
+                <div class="atk-coord-val" id="atk-real-lon">—</div>
+              </div>
+              <div class="atk-coord-col">
+                <div class="atk-coord-lbl spoof">SPOOF POSITION</div>
+                <div class="atk-coord-val" id="atk-spoof-lat">—</div>
+                <div class="atk-coord-val" id="atk-spoof-lon">—</div>
+              </div>
+            </div>
+
+            <div class="atk-llm" style="margin-top:6px">
+              <div class="atk-llm-lbl">DECOY 전략 (LLM①)</div>
+              <div class="atk-llm-txt" id="atk-decoy-reason">대기 중...</div>
+            </div>
+            <div class="atk-llm" id="atk-llm-wrap" style="margin-top:6px">
+              <div class="atk-llm-lbl">ADAPTIVE CTRL</div>
+              <div class="atk-llm-txt" id="atk-llm-txt">대기 중...</div>
+            </div>
+          </div>
+
+          <!-- ── 파란 드론 거리 (항상 표시) ── -->
+          <div class="atk-route" style="margin-top:8px">
+            <div class="atk-route-hdr" style="margin-bottom:6px">
+              <span class="atk-route-ttl">BLUE DRONE DISTANCES</span>
+              <span style="font-size:8px;color:#884444;">탐지범위 30km</span>
+            </div>
+            <div id="atk-blue-dists"></div>
+          </div>
+
+          <!-- ── 드론 우회 경로 (항상 표시) ── -->
+          <div class="atk-route" style="margin-top:8px">
+            <div class="atk-route-hdr">
+              <span class="atk-route-ttl">DRONE ROUTE (LLM①)</span>
+              <span class="atk-wp-prog">WP <span id="atk-wp-idx">0</span> / <span id="atk-wp-total">0</span></span>
+            </div>
+            <div class="atk-bar-wrap">
+              <div class="atk-bar" id="atk-wp-bar" style="width:0%;background:linear-gradient(90deg,#1a5060,#28b8cc)"></div>
+            </div>
+            <div class="atk-route-msg" id="atk-route-msg">파란 드론 위협 감지 시 우회 경로 생성...</div>
+          </div>
+        </div>
+
         <div class="section section-ai">
           <div class="sec-hdr" style="margin-bottom:14px;">
             <span class="sec-ttl-ai">AI Advisor</span>
@@ -221,6 +372,29 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
           </div>
         </div>
 
+        <!-- ── 지휘 명령 패널 ── -->
+        <div class="section section-cmd">
+          <div class="sec-hdr" style="margin-bottom:12px;">
+            <span class="sec-ttl-cmd">지휘 명령</span>
+            <span id="cmd-badge" style="font-size:9px;font-family:var(--fnt-mono);color:#664488;
+              background:#0a0614;border:1px solid #331a66;padding:1px 8px;border-radius:10px;">STANDBY</span>
+          </div>
+
+          <!-- 진행 중 명령 목록 -->
+          <div class="cmd-orders" id="cmd-orders-list" style="display:none"></div>
+
+          <!-- LLM 응답 -->
+          <div class="cmd-reply" id="cmd-reply" style="display:none"></div>
+
+          <!-- 입력창 -->
+          <div class="cmd-input-wrap">
+            <textarea class="cmd-input" id="cmd-input"
+              placeholder="예) ALPHA-1을 디코이 방향으로 출격&#10;예) BRAVO-2와 DELTA-4 차단 위치로 이동"></textarea>
+            <button class="cmd-submit" id="cmd-submit">전송</button>
+          </div>
+          <div class="cmd-thinking" id="cmd-thinking">■ LLM 명령 해석 중...</div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -236,7 +410,7 @@ body{font-family:var(--fnt-ui);background:var(--bg);color:var(--txt-1);}
 <script>
 (function(){
 var KR=L.latLngBounds([33.0,124.5],[38.9,132.0]);
-var map=L.map('map',{center:[37.548,127.000],zoom:12,minZoom:7,
+var map=L.map('map',{center:[37.72,127.020],zoom:10,minZoom:7,
   maxBounds:KR,maxBoundsViscosity:1.0,zoomControl:false,attributionControl:false});
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   {maxZoom:18,bounds:KR}).addTo(map);
@@ -256,12 +430,53 @@ function mkIcon(id){
       +'<div style="position:absolute;top:22px;left:50%;transform:translateX(-50%);white-space:nowrap;font:700 9px monospace;color:'+def.c+';text-shadow:0 0 6px #000;letter-spacing:.5px">'+id+'</div></div>',
     className:'',iconSize:[28,20],iconAnchor:[14,10]});
 }
+// 위조 위치 마커 — 빨간 점선 쿼드콥터 (적군 GCS에 표시되는 허위 위치)
 function mkUnkIcon(id){
+  var c='#ff4444', bg='rgba(30,0,0,.75)';
+  var svg='<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
+    +'<circle cx="20" cy="20" r="5" fill="'+bg+'" stroke="'+c+'" stroke-width="2" stroke-dasharray="4 3"/>'
+    +'<line x1="20" y1="20" x2="8" y2="8" stroke="'+c+'" stroke-width="1.5" stroke-dasharray="5 3"/>'
+    +'<line x1="20" y1="20" x2="32" y2="8" stroke="'+c+'" stroke-width="1.5" stroke-dasharray="5 3"/>'
+    +'<line x1="20" y1="20" x2="8" y2="32" stroke="'+c+'" stroke-width="1.5" stroke-dasharray="5 3"/>'
+    +'<line x1="20" y1="20" x2="32" y2="32" stroke="'+c+'" stroke-width="1.5" stroke-dasharray="5 3"/>'
+    +'<circle cx="8" cy="8" r="4.5" fill="'+bg+'" stroke="'+c+'" stroke-width="1.5" stroke-dasharray="3 2"/>'
+    +'<circle cx="32" cy="8" r="4.5" fill="'+bg+'" stroke="'+c+'" stroke-width="1.5" stroke-dasharray="3 2"/>'
+    +'<circle cx="8" cy="32" r="4.5" fill="'+bg+'" stroke="'+c+'" stroke-width="1.5" stroke-dasharray="3 2"/>'
+    +'<circle cx="32" cy="32" r="4.5" fill="'+bg+'" stroke="'+c+'" stroke-width="1.5" stroke-dasharray="3 2"/>'
+    +'</svg>';
   return L.divIcon({
-    html:'<div style="position:relative;width:28px;height:28px"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><rect x="1" y="1" width="26" height="26" fill="rgba(28,18,0,.88)" stroke="#e8a020" stroke-width="1.5" stroke-dasharray="4 2"/><text x="14" y="19" text-anchor="middle" font-size="14" font-family="monospace" font-weight="bold" fill="#e8a020">?</text></svg>'
-      +'<div style="position:absolute;top:30px;left:50%;transform:translateX(-50%);white-space:nowrap;font:700 9px monospace;color:#e8a020;text-shadow:0 0 6px #000">'+id+'</div></div>',
-    className:'',iconSize:[28,28],iconAnchor:[14,14]});
+    html:'<div style="position:relative;width:40px;height:40px">'+svg
+      +'<div style="position:absolute;top:42px;left:50%;transform:translateX(-50%);white-space:nowrap;'
+      +'font:700 9px monospace;color:'+c+';text-shadow:0 0 6px #000;'
+      +'background:rgba(30,0,0,.85);padding:1px 5px;border-radius:2px;border:1px dashed '+c+'">'+id+' 위조</div>'
+      +'</div>',
+    className:'',iconSize:[40,40],iconAnchor:[20,20]});
 }
+
+// 실제 위치 마커 — 주황 실선 쿼드콥터 (우리 드론의 진짜 위치)
+function mkRealDroneIcon(id){
+  var c='#e8a020', bg='rgba(28,14,0,.9)';
+  var svg='<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">'
+    +'<circle cx="20" cy="20" r="5" fill="'+bg+'" stroke="'+c+'" stroke-width="2"/>'
+    +'<line x1="20" y1="20" x2="8" y2="8" stroke="'+c+'" stroke-width="1.8"/>'
+    +'<line x1="20" y1="20" x2="32" y2="8" stroke="'+c+'" stroke-width="1.8"/>'
+    +'<line x1="20" y1="20" x2="8" y2="32" stroke="'+c+'" stroke-width="1.8"/>'
+    +'<line x1="20" y1="20" x2="32" y2="32" stroke="'+c+'" stroke-width="1.8"/>'
+    +'<circle cx="8" cy="8" r="4.5" fill="'+bg+'" stroke="'+c+'" stroke-width="1.8"/>'
+    +'<circle cx="32" cy="8" r="4.5" fill="'+bg+'" stroke="'+c+'" stroke-width="1.8"/>'
+    +'<circle cx="8" cy="32" r="4.5" fill="'+bg+'" stroke="'+c+'" stroke-width="1.8"/>'
+    +'<circle cx="32" cy="32" r="4.5" fill="'+bg+'" stroke="'+c+'" stroke-width="1.8"/>'
+    +'<circle cx="20" cy="20" r="2" fill="'+c+'"/>'
+    +'</svg>';
+  return L.divIcon({
+    html:'<div style="position:relative;width:40px;height:40px">'+svg
+      +'<div style="position:absolute;top:42px;left:50%;transform:translateX(-50%);white-space:nowrap;'
+      +'font:700 9px monospace;color:'+c+';text-shadow:0 0 6px #000;'
+      +'background:rgba(28,14,0,.9);padding:1px 5px;border-radius:2px;border:1px solid '+c+'">'+id+' 실제</div>'
+      +'</div>',
+    className:'',iconSize:[40,40],iconAnchor:[20,20]});
+}
+
 
 var markers={},trails={},trailPts={},dragging={};
 [{id:'ALPHA-1',lat:37.5340,lon:126.9850},{id:'BRAVO-2',lat:37.5680,lon:126.9280},
@@ -398,8 +613,293 @@ function pollAI(){
 }
 
 function poll(){fetch('/api/state').then(function(r){return r.json();}).then(tick).catch(function(){});}
-setInterval(poll,500); setInterval(clk,1000); setInterval(pollAI,3000);
-poll(); clk(); pollAI();
+
+// ── 공격 에이전트 상태 폴링 ──
+var atkRealMarker=null, atkRealTrailPts=[], atkRealTrail=null;
+var atkSpoofMarker=null, atkSpoofTrailPts=[], atkSpoofTrail=null;
+var atkGapLine=null;
+var atkRoutePolyline=null, atkRouteWpMarkers=[];
+var atkTargetMarker=null, atkTargetLine=null;
+
+function pollAttack(){
+  fetch('/api/attack/status').then(function(r){return r.json();}).then(function(d){
+    var badge=document.getElementById('atk-status-badge');
+    if(!d.running){
+      badge.textContent='IDLE'; badge.style.color='#884444';
+      return;
+    }
+    var decoyActive=d.decoy_active;
+    badge.textContent=decoyActive?'DECOY ON':'STANDBY';
+    badge.style.color=decoyActive?'#ff4444':'#e8a020';
+
+    // ── decoy 관련 수치: 활성 시에만 표시 ──
+    var decoySection=document.getElementById('atk-decoy-section');
+    decoySection.style.display=decoyActive?'':'none';
+
+    if(decoyActive){
+      // 주입 횟수
+      document.getElementById('atk-inject').textContent=d.inject_count||0;
+
+      // GAP
+      var gap=d.gap_km;
+      var distEl=document.getElementById('atk-dist');
+      distEl.textContent=gap!=null?gap.toFixed(3)+' km':'—';
+      distEl.className='atk-val'+(gap>1.0?' ok':gap>0.3?' warn':'');
+
+      // SPOOF SPEED
+      var prof=d.profile||{};
+      var stepKm=prof.step_km||0;
+      var spoofStepKm=(d.step_size||0)*111;
+      var speedRatio=stepKm>0?spoofStepKm/stepKm:0;
+      var thEl=document.getElementById('atk-thresh');
+      thEl.textContent=speedRatio>0?speedRatio.toFixed(2)+'x':'—';
+      thEl.className='atk-val'+(speedRatio<1.0?' ok':speedRatio<1.1?' warn':'');
+
+      // STEP SIZE
+      document.getElementById('atk-step').textContent=
+        d.step_size!=null?Math.round(d.step_size*111*1000)+' m':'—';
+
+      // SUCCESS RATE
+      var rate=d.success_rate;
+      var rateEl=document.getElementById('atk-rate');
+      rateEl.textContent=rate!=null?rate.toFixed(1)+'%':'—';
+      rateEl.className='atk-val'+(rate>=80?' ok':rate>=50?' warn':'');
+      document.getElementById('atk-bar').style.width=(rate||0)+'%';
+
+      // RISK LEVEL
+      var llm=d.llm_last||{};
+      var risk=llm.risk||'—';
+      var riskEl=document.getElementById('atk-risk');
+      riskEl.textContent=risk.toUpperCase();
+      riskEl.className='atk-val'+(risk==='safe'?' ok':risk==='warning'?' warn':'');
+
+      // 좌표
+      document.getElementById('atk-real-lat').textContent=d.real_lat!=null?d.real_lat.toFixed(6):'—';
+      document.getElementById('atk-real-lon').textContent=d.real_lon!=null?d.real_lon.toFixed(6):'—';
+      document.getElementById('atk-spoof-lat').textContent=d.spoof_lat!=null?d.spoof_lat.toFixed(6):'—';
+      document.getElementById('atk-spoof-lon').textContent=d.spoof_lon!=null?d.spoof_lon.toFixed(6):'—';
+
+      // LLM 판단
+      if(llm.reason){
+        document.getElementById('atk-llm-txt').textContent='['+risk+'] '+llm.reason;
+      }
+      // Decoy 전략
+      var dr=d.decoy_route||{};
+      if(dr.last_msg) document.getElementById('atk-decoy-reason').textContent=dr.last_msg;
+    }
+
+    // ── 지도: 실제 위치 마커 (주황 실선 쿼드콥터) ──
+    if(d.real_lat!=null && d.real_lon!=null){
+      if(!atkRealMarker){
+        atkRealMarker=L.marker([d.real_lat,d.real_lon],{icon:mkRealDroneIcon(d.target_id||'OUR'),zIndexOffset:1000}).addTo(map);
+        atkRealTrail=L.polyline([],{color:'#e8a020',weight:1.5,opacity:0.6,dashArray:'4 4'}).addTo(map);
+      }
+      atkRealMarker.setLatLng([d.real_lat,d.real_lon]);
+      atkRealTrailPts.push([d.real_lat,d.real_lon]);
+      if(atkRealTrailPts.length>60)atkRealTrailPts.shift();
+      atkRealTrail.setLatLngs(atkRealTrailPts);
+    }
+
+    // ── 지도: 위조 위치는 UNK 마커(state.units)가 이미 표시 중
+    //          별도 trail만 관리 ──
+    if(d.spoof_lat!=null && d.spoof_lon!=null){
+      if(!atkSpoofTrail){
+        atkSpoofTrail=L.polyline([],{color:'#ff4444',weight:1.5,opacity:0.5,dashArray:'3 5'}).addTo(map);
+      }
+      atkSpoofTrailPts.push([d.spoof_lat,d.spoof_lon]);
+      if(atkSpoofTrailPts.length>60)atkSpoofTrailPts.shift();
+      atkSpoofTrail.setLatLngs(atkSpoofTrailPts);
+    }
+
+    // ── 지도: 실제↔위조 연결선 ──
+    if(d.real_lat!=null && d.spoof_lat!=null){
+      var pts=[[d.real_lat,d.real_lon],[d.spoof_lat,d.spoof_lon]];
+      if(!atkGapLine){
+        atkGapLine=L.polyline(pts,{color:'#ffffff',weight:1,opacity:0.35,dashArray:'6 4'}).addTo(map);
+      } else {
+        atkGapLine.setLatLngs(pts);
+      }
+    }
+
+    // ── 파란 드론 거리 테이블 ──
+    var blueDists=d.blue_dists||[];
+    var bdEl=document.getElementById('atk-blue-dists');
+    if(blueDists.length){
+      bdEl.innerHTML=blueDists.map(function(b){
+        var inRange=b.dist_real_km!=null&&b.dist_real_km<30;
+        var realColor=inRange?'#ff6666':'#3aaf5c';
+        var realTxt=b.dist_real_km!=null?b.dist_real_km.toFixed(1)+' km':'—';
+        var decoyTxt=b.dist_decoy_km!=null?b.dist_decoy_km.toFixed(1)+' km':'—';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;'
+          +'padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:10px;font-family:monospace">'
+          +'<span style="color:var(--txt-2);min-width:72px">'+b.id+'</span>'
+          +'<span style="color:'+realColor+'">실제 '+realTxt+'</span>'
+          +'<span style="color:#ff8888">디코이 '+decoyTxt+'</span>'
+          +'</div>';
+      }).join('');
+    }
+
+    // ── ROUTE: 웨이포인트 진행 ──
+    var route=d.route||{};
+    var wpIdx=route.wp_index||0, wpTotal=route.total||0;
+    document.getElementById('atk-wp-idx').textContent=wpIdx;
+    document.getElementById('atk-wp-total').textContent=wpTotal;
+    var wpPct=wpTotal>0?Math.round(wpIdx/wpTotal*100):0;
+    document.getElementById('atk-wp-bar').style.width=wpPct+'%';
+    document.getElementById('atk-route-msg').textContent=route.last_msg||'웨이포인트 생성 대기 중...';
+
+    // ── 지도: 목표 좌표 마커 ──
+    var tgt=d.target||{};
+    if(tgt.lat!=null && tgt.lon!=null){
+      if(!atkTargetMarker){
+        var tgtIcon=L.divIcon({
+          html:'<div style="position:relative;width:36px;height:36px">'
+            +'<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">'
+            +'<circle cx="18" cy="18" r="14" fill="none" stroke="#00ffaa" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.7"/>'
+            +'<circle cx="18" cy="18" r="7" fill="none" stroke="#00ffaa" stroke-width="1.5" opacity="0.9"/>'
+            +'<circle cx="18" cy="18" r="2.5" fill="#00ffaa"/>'
+            +'<line x1="18" y1="2" x2="18" y2="10" stroke="#00ffaa" stroke-width="1.5" opacity="0.8"/>'
+            +'<line x1="18" y1="26" x2="18" y2="34" stroke="#00ffaa" stroke-width="1.5" opacity="0.8"/>'
+            +'<line x1="2" y1="18" x2="10" y2="18" stroke="#00ffaa" stroke-width="1.5" opacity="0.8"/>'
+            +'<line x1="26" y1="18" x2="34" y2="18" stroke="#00ffaa" stroke-width="1.5" opacity="0.8"/>'
+            +'</svg>'
+            +'<div style="position:absolute;top:38px;left:50%;transform:translateX(-50%);white-space:nowrap;'
+            +'font:700 9px monospace;color:#00ffaa;text-shadow:0 0 6px #000;'
+            +'background:rgba(0,20,10,.9);padding:1px 6px;border-radius:2px;border:1px solid #00ffaa88">TARGET</div>'
+            +'</div>',
+          className:'',iconSize:[36,36],iconAnchor:[18,18]
+        });
+        atkTargetMarker=L.marker([tgt.lat,tgt.lon],{icon:tgtIcon,interactive:false,zIndexOffset:2000}).addTo(map);
+      }
+    }
+
+    // ── 지도: 현재 실제 위치 → 목표 직선 (잔여 거리 가이드) ──
+    if(d.real_lat!=null && tgt.lat!=null){
+      var tgtPts=[[d.real_lat,d.real_lon],[tgt.lat,tgt.lon]];
+      if(!atkTargetLine){
+        atkTargetLine=L.polyline(tgtPts,{color:'#00ffaa',weight:1,opacity:0.2,dashArray:'4 6'}).addTo(map);
+      } else {
+        atkTargetLine.setLatLngs(tgtPts);
+      }
+    }
+
+    // ── 지도: 실제 드론 우회 경로 폴리라인 & 웨이포인트 마커 ──
+    var wps=route.waypoints||[];
+    if(wps.length>=2){
+      var lls=wps.map(function(wp){return[wp[0],wp[1]];});
+      if(!atkRoutePolyline){
+        atkRoutePolyline=L.polyline(lls,{color:'#28b8cc',weight:2,opacity:0.6,dashArray:'8 4'}).addTo(map);
+      } else {
+        atkRoutePolyline.setLatLngs(lls);
+      }
+      // 웨이포인트 마커 갱신
+      atkRouteWpMarkers.forEach(function(m){map.removeLayer(m);});
+      atkRouteWpMarkers=[];
+      wps.forEach(function(wp,i){
+        var done=i<wpIdx, isCur=i===wpIdx;
+        var color=isCur?'#28b8cc':done?'#1a5060':'#1a7088';
+        var size=isCur?10:6;
+        var ic=L.divIcon({
+          html:'<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;'
+            +'background:'+color+';border:1.5px solid rgba(255,255,255,'+(isCur?0.8:0.3)+');'
+            +'opacity:'+(done?0.3:0.85)+'"></div>',
+          className:'',iconSize:[size,size],iconAnchor:[size/2,size/2]
+        });
+        atkRouteWpMarkers.push(L.marker([wp[0],wp[1]],{icon:ic,interactive:false}).addTo(map));
+      });
+    } else if(atkRoutePolyline){
+      atkRoutePolyline.setLatLngs([]);
+      atkRouteWpMarkers.forEach(function(m){map.removeLayer(m);});
+      atkRouteWpMarkers=[];
+    }
+
+  }).catch(function(){});
+}
+
+setInterval(poll,500); setInterval(clk,1000); setInterval(pollAI,3000); setInterval(pollAttack,1000);
+poll(); clk(); pollAI(); pollAttack();
+
+// ── 지휘 명령 ──
+var cmdSubmit = document.getElementById('cmd-submit');
+var cmdInput  = document.getElementById('cmd-input');
+var cmdThink  = document.getElementById('cmd-thinking');
+
+function sendCommand(){
+  var text = cmdInput.value.trim();
+  if(!text) return;
+  cmdSubmit.disabled = true;
+  cmdThink.classList.add('on');
+  fetch('/api/command', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text: text})
+  }).then(function(r){return r.json();}).then(function(d){
+    cmdInput.value = '';
+    var replyEl = document.getElementById('cmd-reply');
+    if(d.reply){
+      replyEl.textContent = d.reply;
+      replyEl.style.display = '';
+    }
+    if(d.error){
+      replyEl.textContent = '[오류] ' + d.error;
+      replyEl.style.display = '';
+    }
+    pollCommand();
+  }).catch(function(e){
+    var replyEl = document.getElementById('cmd-reply');
+    replyEl.textContent = '[통신 오류] ' + e;
+    replyEl.style.display = '';
+  }).finally(function(){
+    cmdSubmit.disabled = false;
+    cmdThink.classList.remove('on');
+  });
+}
+
+cmdSubmit.addEventListener('click', sendCommand);
+cmdInput.addEventListener('keydown', function(e){
+  if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)){
+    e.preventDefault(); sendCommand();
+  }
+});
+
+function pollCommand(){
+  fetch('/api/command/latest').then(function(r){return r.json();}).then(function(d){
+    var activeOrders = d.active_orders || {};
+    var ids = Object.keys(activeOrders);
+    var badge = document.getElementById('cmd-badge');
+    var ordersList = document.getElementById('cmd-orders-list');
+
+    if(ids.length){
+      badge.textContent = 'ACTIVE ' + ids.length;
+      badge.style.color = '#aa88ff';
+      ordersList.style.display = '';
+      ordersList.innerHTML = ids.map(function(uid){
+        var o = activeOrders[uid];
+        return '<div class="cmd-order-row">'
+          +'<span class="cmd-order-id">'+uid+'</span>'
+          +'<span class="cmd-order-mission">'+( o.mission||'이동 중' )+'</span>'
+          +'<span class="cmd-order-clear" onclick="clearOrder(\''+uid+'\')">해제</span>'
+          +'</div>';
+      }).join('');
+    } else {
+      badge.textContent = 'STANDBY';
+      badge.style.color = '#664488';
+      ordersList.style.display = 'none';
+      ordersList.innerHTML = '';
+    }
+  }).catch(function(){});
+}
+
+function clearOrder(uid){
+  fetch('/api/command/clear', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: uid})
+  }).then(function(){pollCommand();}).catch(function(){});
+}
+
+setInterval(pollCommand, 2000);
+pollCommand();
 })();
 </script>
 </body></html>
